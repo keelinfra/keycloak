@@ -1,0 +1,56 @@
+.ansible-lint
+  s_daf9a6a1e085cf::t_2eeacca3102423 1-9
+configure
+  s_daf9a6a1e085cf::t_a9e5388f9193e4 1-30,40-46
+  s_daf9a6a1e085cf::t_5230ad6ef99aba 34
+  s_daf9a6a1e085cf::t_dbaa6709b08faa 31
+  s_daf9a6a1e085cf::t_3b2db981b2bcff 32-33,35-37
+  s_daf9a6a1e085cf::t_70d7e1596e57dc 38-39
+requirements.yml
+  s_daf9a6a1e085cf::t_5768cd3a02d24c 1-10
+.gitignore
+  s_daf9a6a1e085cf::t_5768cd3a02d24c 1-7,9-10
+  s_daf9a6a1e085cf::t_de168a9534b163 8
+examples/ha-3node.yml
+  s_daf9a6a1e085cf::t_5768cd3a02d24c 1-34
+.yamllint
+  s_daf9a6a1e085cf::t_de168a9534b163 16
+  s_daf9a6a1e085cf::t_2eeacca3102423 1-14
+  s_daf9a6a1e085cf::t_488b52e481c7df 15
+UPGRADES.md
+  s_daf9a6a1e085cf::t_5768cd3a02d24c 1-10,13-27
+  s_daf9a6a1e085cf::t_c62385df35eb8b 12
+  s_daf9a6a1e085cf::t_7d8c246a8490e5 11
+README.md
+  s_daf9a6a1e085cf::t_32be986c3aebc6 1-51,57,59-75
+  s_daf9a6a1e085cf::t_3c784524d1b47f 52-56,58
+verify
+  s_daf9a6a1e085cf::t_a9e5388f9193e4 1-8,10
+  s_daf9a6a1e085cf::t_70d7e1596e57dc 9
+install
+  s_daf9a6a1e085cf::t_a9e5388f9193e4 1-5,7
+  s_daf9a6a1e085cf::t_70d7e1596e57dc 6
+ansible.cfg
+  s_daf9a6a1e085cf::t_d202aaaa75f2b4 7
+  s_daf9a6a1e085cf::t_5768cd3a02d24c 1-6,10-17
+  s_daf9a6a1e085cf::t_d75ed65ff66e0e 8-9
+upgrade
+  s_daf9a6a1e085cf::t_70d7e1596e57dc 18
+  s_daf9a6a1e085cf::t_a9e5388f9193e4 1-17,19-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "521c9ba180c2feca13a84e23f1f314ef59d60869",
+  "prompts": {},
+  "sessions": {
+    "s_daf9a6a1e085cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00e14330-d378-4b7d-9ecb-68cf59eb16b3",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
