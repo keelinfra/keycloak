@@ -50,3 +50,17 @@ jobs:
 
       - name: Session survives restart
         run: ./verify --drill session
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: |
+          echo "=== keycloak status ==="
+          sudo systemctl status keycloak --no-pager || true
+          echo "=== keycloak journal ==="
+          sudo journalctl -u keycloak --no-pager | tail -120 || true
+          echo "=== patroni journal ==="
+          sudo journalctl -u patroni --no-pager | tail -40 || true
+          echo "=== haproxy journal ==="
+          sudo journalctl -u haproxy --no-pager | tail -20 || true
+          echo "=== listeners ==="
+          sudo ss -tlnp || true
