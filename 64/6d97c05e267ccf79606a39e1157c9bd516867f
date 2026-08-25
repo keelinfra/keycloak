@@ -1,0 +1,21 @@
+roles/keycloak/templates/keycloak.service.j2
+  s_daf9a6a1e085cf::t_29410e98388d13 12
+roles/postgres/tasks/main.yml
+  s_daf9a6a1e085cf::t_ad9c30e72c58bf 66-68,71-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "646d97c05e267ccf79606a39e1157c9bd516867f",
+  "prompts": {},
+  "sessions": {
+    "s_daf9a6a1e085cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00e14330-d378-4b7d-9ecb-68cf59eb16b3",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
