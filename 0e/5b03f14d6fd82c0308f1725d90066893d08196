@@ -1,0 +1,61 @@
+roles/keycloak/handlers/main.yml
+  s_daf9a6a1e085cf::t_f0018a6a8ef082 2
+  s_daf9a6a1e085cf::t_25ec6b1e7ec9bf 1,3-6
+realms/demo.yml
+  s_daf9a6a1e085cf::t_a862b00534b376 1-21
+roles/keycloak/defaults/main.yml
+  s_daf9a6a1e085cf::t_25ec6b1e7ec9bf 1-7
+roles/keycloak/templates/secrets.env.j2
+  s_daf9a6a1e085cf::t_25ec6b1e7ec9bf 1-3
+roles/keycloak/templates/keycloak.conf.j2
+  s_daf9a6a1e085cf::t_25ec6b1e7ec9bf 1-21
+roles/keepalived/handlers/main.yml
+  s_daf9a6a1e085cf::t_efbda68611c41d 1-5
+roles/keycloak/tasks/deploy_version.yml
+  s_daf9a6a1e085cf::t_ee23eeaa642707 1-46,48-69,71-74
+  s_daf9a6a1e085cf::t_488b52e481c7df 47
+  s_daf9a6a1e085cf::t_8fbb6fb1809f1a 70,75
+roles/keepalived/tasks/main.yml
+  s_daf9a6a1e085cf::t_efbda68611c41d 1-18
+roles/tls/tasks/main.yml
+  s_daf9a6a1e085cf::t_5c2ba0bf8ed89c 1-94
+  s_daf9a6a1e085cf::t_488b52e481c7df 95
+roles/config_cli/defaults/main.yml
+  s_daf9a6a1e085cf::t_4f4712e434f7e7 7-8
+  s_daf9a6a1e085cf::t_a862b00534b376 1,6,9-10
+  s_daf9a6a1e085cf::t_0ce5d37d3f657b 2-5
+roles/keepalived/defaults/main.yml
+  s_daf9a6a1e085cf::t_efbda68611c41d 1-3
+roles/tls/defaults/main.yml
+  s_daf9a6a1e085cf::t_5c2ba0bf8ed89c 1-5
+roles/keepalived/templates/keepalived.conf.j2
+  s_daf9a6a1e085cf::t_efbda68611c41d 1-24
+roles/keycloak/tasks/main.yml
+  s_daf9a6a1e085cf::t_25ec6b1e7ec9bf 1-28,31,37-50,52-88
+  s_daf9a6a1e085cf::t_0cdd074363e22c 29-30,32-35
+  s_daf9a6a1e085cf::t_f0018a6a8ef082 36,51
+roles/keycloak/templates/keycloak.service.j2
+  s_daf9a6a1e085cf::t_25ec6b1e7ec9bf 1-20
+roles/tls/handlers/main.yml
+  s_daf9a6a1e085cf::t_488b52e481c7df 1-4
+roles/config_cli/tasks/main.yml
+  s_daf9a6a1e085cf::t_488b52e481c7df 31,48-50
+  s_daf9a6a1e085cf::t_a862b00534b376 1-30,32-43
+  s_daf9a6a1e085cf::t_9e75f44e554ff3 44-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "0e5b03f14d6fd82c0308f1725d90066893d08196",
+  "prompts": {},
+  "sessions": {
+    "s_daf9a6a1e085cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00e14330-d378-4b7d-9ecb-68cf59eb16b3",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
