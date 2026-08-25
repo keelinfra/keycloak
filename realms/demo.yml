@@ -1,0 +1,21 @@
+---
+# Example realm managed as code via keycloak-config-cli.
+# Everything under realms/ is applied on every ./install run — edit, commit, re-run.
+realm: demo
+enabled: true
+displayName: keelinfra demo realm
+registrationAllowed: false
+resetPasswordAllowed: true
+bruteForceProtected: true
+users:
+  - username: demo
+    enabled: true
+    email: demo@example.com
+    emailVerified: true
+    firstName: Demo
+    lastName: User
+    credentials:
+      # demo credentials for the session-survival drill — replace in production
+      - type: password
+        value: demo12345
+        temporary: false

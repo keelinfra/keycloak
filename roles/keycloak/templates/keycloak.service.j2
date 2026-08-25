@@ -1,0 +1,20 @@
+[Unit]
+Description=Keycloak (keelinfra)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=keycloak
+Group=keycloak
+EnvironmentFile={{ keycloak_conf_dir }}/secrets.env
+Environment=KC_HOME_DIR={{ keycloak_home }}/current
+Environment=JAVA_OPTS_KC_HEAP={{ keycloak_heap }}
+ExecStart={{ keycloak_home }}/current/bin/kc.sh start --optimized
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

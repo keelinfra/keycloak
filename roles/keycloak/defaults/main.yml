@@ -1,0 +1,7 @@
+---
+keycloak_home: /opt/keycloak
+keycloak_conf_dir: /etc/keycloak
+keycloak_heap: "-Xms512m -Xmx1024m"
+keycloak_db_url: "jdbc:postgresql://127.0.0.1:5433/keycloak"
+# first node bootstraps the schema before the others start
+keycloak_first_node: "{{ groups['keycloak'][0] }}"

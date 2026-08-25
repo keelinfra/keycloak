@@ -1,0 +1,21 @@
+# Managed by keelinfra — build-time and runtime options
+db=postgres
+db-url={{ keycloak_db_url }}
+db-username={{ keycloak_db_user }}
+db-password={{ vault_keycloak_db_password }}
+
+hostname=https://{{ keycloak_domain }}
+http-enabled=false
+https-port={{ keycloak_https_port }}
+https-certificate-file={{ tls_dir }}/server.crt
+https-certificate-key-file={{ tls_dir }}/server.key
+
+# clustering: jdbc-ping discovery via the shared database (KC 26 default)
+cache=ispn
+jgroups-bind-address={{ ansible_host }}
+
+health-enabled=true
+metrics-enabled=true
+event-metrics-user-enabled=true
+
+proxy-headers=xforwarded

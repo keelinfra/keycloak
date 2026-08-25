@@ -1,0 +1,95 @@
+---
+- name: Create TLS directory
+  ansible.builtin.file:
+    path: "{{ tls_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Generate CA and server certificate (CA host only)
+  when: inventory_hostname == tls_ca_host
+  block:
+    - name: Generate CA private key
+      community.crypto.openssl_privatekey:
+        path: "{{ tls_dir }}/ca.key"
+        type: Ed25519
+        mode: "0600"
+
+    - name: Generate CA CSR
+      community.crypto.openssl_csr:
+        path: "{{ tls_dir }}/ca.csr"
+        privatekey_path: "{{ tls_dir }}/ca.key"
+        common_name: "{{ cluster_name }} CA"
+        basic_constraints: ["CA:TRUE"]
+        basic_constraints_critical: true
+        key_usage: [keyCertSign, cRLSign]
+        key_usage_critical: true
+
+    - name: Self-sign CA certificate
+      community.crypto.x509_certificate:
+        path: "{{ tls_dir }}/ca.crt"
+        csr_path: "{{ tls_dir }}/ca.csr"
+        privatekey_path: "{{ tls_dir }}/ca.key"
+        provider: selfsigned
+        selfsigned_not_after: "+{{ tls_ca_days }}d"
+        mode: "0644"
+
+    - name: Generate server private key
+      community.crypto.openssl_privatekey:
+        path: "{{ tls_dir }}/server.key"
+        type: RSA
+        size: 2048
+        mode: "0640"
+        group: ssl-cert
+
+    - name: Generate server CSR (domain + every node as SAN)
+      community.crypto.openssl_csr:
+        path: "{{ tls_dir }}/server.csr"
+        privatekey_path: "{{ tls_dir }}/server.key"
+        common_name: "{{ keycloak_domain }}"
+        subject_alt_name: >-
+          {{ ['DNS:' + keycloak_domain]
+             + (cluster_nodes | map(attribute='name') | map('regex_replace', '^', 'DNS:') | list)
+             + (cluster_nodes | map(attribute='host') | map('regex_replace', '^', 'IP:') | list)
+             + (['IP:' + cluster_vip] if cluster_vip | length > 0 else [])
+             + ['DNS:localhost', 'IP:127.0.0.1'] }}
+
+    - name: Sign server certificate with CA
+      community.crypto.x509_certificate:
+        path: "{{ tls_dir }}/server.crt"
+        csr_path: "{{ tls_dir }}/server.csr"
+        ownca_path: "{{ tls_dir }}/ca.crt"
+        ownca_privatekey_path: "{{ tls_dir }}/ca.key"
+        provider: ownca
+        ownca_not_after: "+{{ tls_cert_days }}d"
+        mode: "0644"
+
+    - name: Read generated material
+      ansible.builtin.slurp:
+        src: "{{ tls_dir }}/{{ item }}"
+      loop: [ca.crt, server.crt, server.key]
+      register: tls_material
+
+- name: Ensure ssl-cert group exists
+  ansible.builtin.group:
+    name: ssl-cert
+    state: present
+
+- name: Distribute certificate material to all nodes
+  ansible.builtin.copy:
+    content: "{{ item.content | b64decode }}"
+    dest: "{{ tls_dir }}/{{ item.item }}"
+    owner: root
+    group: ssl-cert
+    mode: "{{ '0640' if item.item.endswith('.key') else '0644' }}"
+  loop: "{{ hostvars[tls_ca_host].tls_material.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: inventory_hostname != tls_ca_host
+
+- name: Trust the cluster CA system-wide
+  ansible.builtin.copy:
+    src: "{{ tls_dir }}/ca.crt"
+    dest: /usr/local/share/ca-certificates/{{ cluster_name }}-ca.crt
+    remote_src: true
+    mode: "0644"
+  notify: Update CA trust store

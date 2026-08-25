@@ -1,0 +1,24 @@
+# Managed by keelinfra — floating VIP for the Keycloak entrypoint
+vrrp_script chk_haproxy {
+    script "/usr/bin/pgrep -x haproxy"
+    interval 2
+    weight 2
+}
+
+vrrp_instance keelinfra_vip {
+    state {{ 'MASTER' if node_id | int == 1 else 'BACKUP' }}
+    interface {{ keepalived_interface }}
+    virtual_router_id {{ keepalived_router_id }}
+    priority {{ 110 - (node_id | int * 10) }}
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass {{ vault_haproxy_stats_password | truncate(8, true, '') }}
+    }
+    virtual_ipaddress {
+        {{ cluster_vip }}
+    }
+    track_script {
+        chk_haproxy
+    }
+}

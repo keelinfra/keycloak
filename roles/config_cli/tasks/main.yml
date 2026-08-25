@@ -1,0 +1,50 @@
+---
+- name: Create config-cli directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: keycloak
+    group: keycloak
+    mode: "0750"
+  loop:
+    - "{{ config_cli_dir }}"
+    - "{{ config_cli_dir }}/realms"
+
+- name: Download keycloak-config-cli
+  ansible.builtin.get_url:
+    url: "{{ config_cli_jar_url }}"
+    dest: "{{ config_cli_dir }}/keycloak-config-cli.jar"
+    owner: keycloak
+    group: keycloak
+    mode: "0640"
+
+- name: Copy realm definitions
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../realms/"
+    dest: "{{ config_cli_dir }}/realms/"
+    owner: keycloak
+    group: keycloak
+    mode: "0640"
+  register: realm_files
+
+- name: Apply realm configuration
+  become: true
+  become_user: keycloak
+  ansible.builtin.command:
+    cmd: java -jar {{ config_cli_dir }}/keycloak-config-cli.jar
+  environment:
+    KEYCLOAK_URL: "https://127.0.0.1:{{ keycloak_https_port | default(8443) }}"
+    KEYCLOAK_USER: admin
+    KEYCLOAK_PASSWORD: "{{ vault_keycloak_admin_password }}"
+    KEYCLOAK_SSLVERIFY: "false"  # cluster CA is self-signed; JVM has no OS trust
+    IMPORT_FILES_LOCATIONS: "{{ config_cli_dir }}/realms/*.yml"
+    IMPORT_VARSUBSTITUTION_ENABLED: "true"
+    IMPORT_CACHE_ENABLED: "false"
+  register: config_cli_run
+  # right after cluster startup the token endpoint can briefly return 503
+  retries: 6
+  delay: 10
+  until: config_cli_run.rc == 0
+  changed_when: >-
+    'Import realm' in config_cli_run.stdout
+    or 'Creating realm' in config_cli_run.stdout

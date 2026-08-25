@@ -1,0 +1,75 @@
+---
+# Deploy one Keycloak version onto this node: download, unpack, configure,
+# build. Shared by install (main.yml) and upgrade (playbooks/upgrade.yml).
+# Sets kc_deploy_changed; the caller decides when to (re)start the service.
+
+- name: Check installed version {{ keycloak_version }}
+  ansible.builtin.stat:
+    path: "{{ keycloak_home }}/keycloak-{{ keycloak_version }}/bin/kc.sh"
+  register: kc_installed
+
+- name: Download and unpack Keycloak {{ keycloak_version }}
+  when: not kc_installed.stat.exists
+  block:
+    - name: Download distribution
+      ansible.builtin.get_url:
+        url: "https://github.com/keycloak/keycloak/releases/download/{{ keycloak_version }}/keycloak-{{ keycloak_version }}.tar.gz"
+        dest: /tmp/keycloak-{{ keycloak_version }}.tar.gz
+        mode: "0644"
+
+    - name: Unpack distribution
+      ansible.builtin.unarchive:
+        src: /tmp/keycloak-{{ keycloak_version }}.tar.gz
+        dest: "{{ keycloak_home }}"
+        remote_src: true
+        owner: keycloak
+        group: keycloak
+        creates: "{{ keycloak_home }}/keycloak-{{ keycloak_version }}/bin/kc.sh"
+
+- name: Render keycloak.conf
+  ansible.builtin.template:
+    src: keycloak.conf.j2
+    dest: "{{ keycloak_home }}/keycloak-{{ keycloak_version }}/conf/keycloak.conf"
+    owner: keycloak
+    group: keycloak
+    mode: "0600"
+  register: kc_conf
+
+# The official tarball ships a default (h2) build, so file-based idempotence
+# is useless — track our own build stamp keyed on the config checksum.
+- name: Read build stamp
+  ansible.builtin.slurp:
+    src: "{{ keycloak_home }}/keycloak-{{ keycloak_version }}/conf/.keelinfra-build-stamp"
+  register: build_stamp
+  failed_when: false
+
+- name: Build optimized configuration
+  become: true
+  become_user: keycloak
+  ansible.builtin.command:
+    cmd: "{{ keycloak_home }}/keycloak-{{ keycloak_version }}/bin/kc.sh build"
+  when: (build_stamp.content | default('') | b64decode | trim) != kc_conf.checksum
+  changed_when: true
+  register: kc_build
+
+- name: Write build stamp
+  ansible.builtin.copy:
+    content: "{{ kc_conf.checksum }}\n"
+    dest: "{{ keycloak_home }}/keycloak-{{ keycloak_version }}/conf/.keelinfra-build-stamp"
+    owner: keycloak
+    group: keycloak
+    mode: "0600"
+
+- name: Point current at {{ keycloak_version }}
+  ansible.builtin.file:
+    src: "{{ keycloak_home }}/keycloak-{{ keycloak_version }}"
+    dest: "{{ keycloak_home }}/current"
+    state: link
+    owner: keycloak
+    group: keycloak
+  when: kc_switch_symlink | default(true)
+  register: kc_link
+
+- name: Record whether this deployment changed anything
+  ansible.builtin.set_fact:
+    kc_deploy_changed: "{{ kc_conf.changed or (kc_build is changed) or (kc_link is changed) }}"

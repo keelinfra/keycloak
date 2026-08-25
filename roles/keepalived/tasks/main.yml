@@ -1,0 +1,18 @@
+---
+- name: Install keepalived
+  ansible.builtin.apt:
+    name: keepalived
+    state: present
+
+- name: Render keepalived configuration
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    mode: "0600"
+  notify: Restart keepalived
+
+- name: Start keepalived
+  ansible.builtin.systemd:
+    name: keepalived
+    state: started
+    enabled: true

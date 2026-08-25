@@ -1,0 +1,5 @@
+---
+tls_ca_days: 3650
+tls_cert_days: 730
+# CA lives on the first backup_repo node (node1)
+tls_ca_host: "{{ groups['backup_repo'][0] }}"

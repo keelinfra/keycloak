@@ -1,0 +1,88 @@
+---
+- name: Install OpenJDK 21
+  ansible.builtin.apt:
+    name: openjdk-21-jre-headless
+    state: present
+    update_cache: true
+
+- name: Create keycloak user
+  ansible.builtin.user:
+    name: keycloak
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ keycloak_home }}"
+    create_home: false
+    groups: [ssl-cert]
+    append: true
+
+- name: Create keycloak directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: keycloak
+    group: keycloak
+    mode: "0750"
+  loop:
+    - "{{ keycloak_home }}"
+    - "{{ keycloak_conf_dir }}"
+
+- name: Deploy Keycloak {{ keycloak_version }}
+  ansible.builtin.include_tasks: deploy_version.yml
+
+- name: Trigger restart if the deployment changed
+  ansible.builtin.command: /bin/true
+  when: kc_deploy_changed
+  changed_when: true
+  notify: Restart keycloak
+
+- name: Render bootstrap secrets
+  ansible.builtin.template:
+    src: secrets.env.j2
+    dest: "{{ keycloak_conf_dir }}/secrets.env"
+    owner: keycloak
+    group: keycloak
+    mode: "0600"
+
+- name: Install systemd unit
+  ansible.builtin.template:
+    src: keycloak.service.j2
+    dest: /etc/systemd/system/keycloak.service
+    mode: "0644"
+  notify: Restart keycloak
+
+- name: Start first node (runs schema migrations)
+  ansible.builtin.systemd:
+    name: keycloak
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: inventory_hostname == keycloak_first_node
+
+- name: Wait for first node readiness
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ keycloak_mgmt_port }}/health/ready"
+    validate_certs: false
+    status_code: 200
+  register: kc_ready
+  until: kc_ready.status == 200
+  retries: 60
+  delay: 5
+  when: inventory_hostname == keycloak_first_node
+
+- name: Start remaining nodes
+  ansible.builtin.systemd:
+    name: keycloak
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: inventory_hostname != keycloak_first_node
+
+- name: Wait for all nodes readiness
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ keycloak_mgmt_port }}/health/ready"
+    validate_certs: false
+    status_code: 200
+  register: kc_ready_all
+  until: kc_ready_all.status == 200
+  retries: 60
+  delay: 5
