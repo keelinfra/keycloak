@@ -1,0 +1,101 @@
+---
+# Render inventory/ from a cluster definition file. Runs locally, touches no target node.
+- name: Configure cluster from definition file
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    target_inventory_dir: "{{ playbook_dir }}/../inventory"
+  tasks:
+    - name: Load cluster definition
+      ansible.builtin.include_vars:
+        file: "{{ config_file }}"
+        name: cfg
+
+    - name: Validate cluster definition
+      ansible.builtin.assert:
+        that:
+          - cfg.cluster_name is defined and cfg.cluster_name | length > 0
+          - cfg.nodes is defined
+          - cfg.nodes | length in [1, 3]
+          - cfg.nodes | selectattr('host', 'undefined') | list | length == 0
+          - cfg.nodes | selectattr('name', 'undefined') | list | length == 0
+          - cfg.domain is defined and cfg.domain | length > 0
+          - cfg.ssh_user is defined and cfg.ssh_user | length > 0
+          - cfg.keycloak_version is defined
+          - cfg.keycloak_version is match('^26\.[0-9]+\.[0-9]+$')
+          - cfg.tls_mode | default('selfsigned') in ['selfsigned', 'custom']
+        fail_msg: >-
+          Invalid cluster definition. Required: cluster_name, domain, ssh_user,
+          keycloak_version (26.x.y), and exactly 1 or 3 nodes each with host+name.
+
+    - name: Create inventory directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ target_inventory_dir }}"
+        - "{{ target_inventory_dir }}/group_vars/all"
+
+    - name: Render inventory hosts file
+      ansible.builtin.template:
+        src: templates/hosts.yml.j2
+        dest: "{{ target_inventory_dir }}/hosts.yml"
+        mode: "0644"
+
+    - name: Render cluster group_vars
+      ansible.builtin.template:
+        src: templates/cluster.yml.j2
+        dest: "{{ target_inventory_dir }}/group_vars/all/cluster.yml"
+        mode: "0644"
+
+    - name: Check for existing secrets
+      ansible.builtin.stat:
+        path: "{{ target_inventory_dir }}/group_vars/all/vault.yml"
+      register: vault_file
+
+    - name: Generate secrets (first run only)
+      when: not vault_file.stat.exists
+      block:
+        - name: Render secrets file
+          ansible.builtin.template:
+            src: templates/vault.yml.j2
+            dest: "{{ target_inventory_dir }}/group_vars/all/vault.yml"
+            mode: "0600"
+
+        - name: Encrypt secrets with ansible-vault
+          ansible.builtin.command:
+            cmd: >-
+              ansible-vault encrypt
+              {{ target_inventory_dir }}/group_vars/all/vault.yml
+          changed_when: true
+
+    - name: Check SSH reachability of all nodes
+      ansible.builtin.command:
+        cmd: >-
+          ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new
+          {% if cfg.ssh_private_key is defined %}-i {{ cfg.ssh_private_key }}{% endif %}
+          {{ cfg.ssh_user }}@{{ item.host }} sudo -n true
+      loop: "{{ cfg.nodes }}"
+      loop_control:
+        label: "{{ item.name }} ({{ item.host }})"
+      when: item.connection | default('ssh') != 'local'
+      changed_when: false
+      register: ssh_check
+      ignore_errors: true
+
+    - name: Report unreachable nodes
+      ansible.builtin.fail:
+        msg: >-
+          Cannot reach {{ ssh_check.results | select('failed') | map(attribute='item.name') | join(', ') }}
+          via SSH with passwordless sudo. Fix connectivity and re-run ./configure.
+      when: ssh_check.results | rejectattr('skipped', 'defined') | select('failed') | list | length > 0
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: >-
+          Cluster '{{ cfg.cluster_name }}': {{ cfg.nodes | length }} node(s),
+          Keycloak {{ cfg.keycloak_version }}, domain https://{{ cfg.domain }}.
+          Inventory written to inventory/.

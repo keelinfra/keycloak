@@ -1,0 +1,14 @@
+---
+# Deployment constants shared across roles. Not user-facing — user config
+# lives in the cluster definition consumed by ./configure.
+postgres_version: 17
+postgres_port: 5432
+patroni_rest_port: 8008
+postgres_data_dir: "/var/lib/postgresql/{{ postgres_version }}/patroni"
+postgres_bin_dir: "/usr/lib/postgresql/{{ postgres_version }}/bin"
+keycloak_db_name: keycloak
+keycloak_db_user: keycloak
+haproxy_pg_port: 5433
+keycloak_https_port: 8443
+keycloak_mgmt_port: 9000
+tls_dir: /etc/keelinfra/tls

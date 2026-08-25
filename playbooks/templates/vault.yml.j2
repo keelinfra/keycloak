@@ -1,0 +1,10 @@
+---
+# Generated once by ./configure. Encrypted with inventory/.vault_pass.
+vault_postgres_superuser_password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
+vault_postgres_replication_password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
+vault_keycloak_db_password: "{{ lookup('password', '/dev/null length=24 chars=ascii_letters,digits') }}"
+vault_keycloak_admin_password: "{{ lookup('password', '/dev/null length=20 chars=ascii_letters,digits') }}"
+vault_patroni_api_password: "{{ lookup('password', '/dev/null length=20 chars=ascii_letters,digits') }}"
+vault_grafana_admin_password: "{{ lookup('password', '/dev/null length=20 chars=ascii_letters,digits') }}"
+vault_pgbackrest_cipher_pass: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+vault_haproxy_stats_password: "{{ lookup('password', '/dev/null length=20 chars=ascii_letters,digits') }}"
