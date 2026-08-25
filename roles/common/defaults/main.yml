@@ -1,0 +1,13 @@
+---
+# Basic OS preparation shared by every node.
+common_packages:
+  - chrony
+  - curl
+  - gnupg
+  - ca-certificates
+  - python3-psycopg2   # for community.postgresql modules
+  - acl                # for become_user file operations
+common_sysctl:
+  vm.swappiness: 10
+  net.core.somaxconn: 4096
+  net.ipv4.tcp_max_syn_backlog: 4096

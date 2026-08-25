@@ -1,0 +1,8 @@
+---
+etcd_version: "3.5.21"
+etcd_data_dir: /var/lib/etcd
+etcd_client_port: 2379
+etcd_peer_port: 2380
+etcd_arch_map:
+  x86_64: amd64
+  aarch64: arm64

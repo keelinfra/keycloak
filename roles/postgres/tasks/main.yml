@@ -1,0 +1,96 @@
+---
+- name: Add PGDG repository
+  ansible.builtin.deb822_repository:
+    name: pgdg
+    types: deb
+    uris: https://apt.postgresql.org/pub/repos/apt
+    suites: "{{ ansible_distribution_release }}-pgdg"
+    components: main
+    signed_by: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+
+- name: Install PostgreSQL and Patroni
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ postgres_version }}"
+      - patroni
+    state: present
+    update_cache: true
+
+- name: Stop and disable the default PostgreSQL service (Patroni owns the DB)
+  ansible.builtin.systemd:
+    name: postgresql
+    state: stopped
+    enabled: false
+
+- name: Check for apt-created default cluster
+  ansible.builtin.stat:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main/PG_VERSION"
+  register: default_cluster
+
+- name: Drop apt-created default cluster
+  ansible.builtin.command:
+    cmd: pg_dropcluster --stop {{ postgres_version }} main
+  when: default_cluster.stat.exists
+  changed_when: true
+
+- name: Create patroni config directory
+  ansible.builtin.file:
+    path: /etc/patroni
+    state: directory
+    mode: "0750"
+    owner: postgres
+    group: postgres
+
+- name: Render patroni configuration
+  ansible.builtin.template:
+    src: patroni.yml.j2
+    dest: /etc/patroni/config.yml
+    owner: postgres
+    group: postgres
+    mode: "0600"
+  notify: Restart patroni
+
+# Flush BEFORE first start: a pending restart handler firing at play end
+# would interrupt the Patroni bootstrap mid-flight (it creates the
+# replication user right after initdb — killing it there strands the
+# cluster with no replicator role).
+- name: Apply pending patroni restarts before bootstrap
+  ansible.builtin.meta: flush_handlers
+
+- name: Start patroni
+  ansible.builtin.systemd:
+    name: patroni
+    state: started
+    enabled: true
+
+- name: Wait for a Patroni leader to emerge
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:{{ patroni_rest_port }}/leader"
+    status_code: [200, 503]
+  register: patroni_leader
+  until: patroni_leader.status in [200, 503]
+  retries: 30
+  delay: 5
+  changed_when: false
+
+- name: Identify the current leader
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:{{ patroni_rest_port }}/leader"
+    status_code: [200, 503]
+  register: leader_probe
+  changed_when: false
+
+- name: Create Keycloak database objects (leader only)
+  when: leader_probe.status == 200
+  become: true
+  become_user: postgres
+  block:
+    - name: Create keycloak role
+      community.postgresql.postgresql_user:
+        name: "{{ keycloak_db_user }}"
+        password: "{{ vault_keycloak_db_password }}"
+
+    - name: Create keycloak database
+      community.postgresql.postgresql_db:
+        name: "{{ keycloak_db_name }}"
+        owner: "{{ keycloak_db_user }}"

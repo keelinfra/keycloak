@@ -1,0 +1,89 @@
+---
+- name: Create etcd system user
+  ansible.builtin.user:
+    name: etcd
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ etcd_data_dir }}"
+    create_home: false
+
+- name: Create etcd directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: etcd
+    group: etcd
+    mode: "0700"
+  loop:
+    - "{{ etcd_data_dir }}"
+    - /etc/etcd
+
+- name: Check installed etcd version
+  ansible.builtin.command: /usr/local/bin/etcd --version
+  register: etcd_installed
+  changed_when: false
+  failed_when: false
+
+- name: Download and install etcd {{ etcd_version }}
+  when: etcd_version not in (etcd_installed.stdout | default(''))
+  block:
+    - name: Download etcd release
+      ansible.builtin.get_url:
+        url: >-
+          https://github.com/etcd-io/etcd/releases/download/v{{ etcd_version
+          }}/etcd-v{{ etcd_version }}-linux-{{ etcd_arch_map[ansible_architecture] }}.tar.gz
+        dest: /tmp/etcd-{{ etcd_version }}.tar.gz
+        mode: "0644"
+
+    - name: Extract etcd binaries
+      ansible.builtin.unarchive:
+        src: /tmp/etcd-{{ etcd_version }}.tar.gz
+        dest: /tmp
+        remote_src: true
+
+    - name: Install etcd binaries
+      ansible.builtin.copy:
+        src: "/tmp/etcd-v{{ etcd_version }}-linux-{{ etcd_arch_map[ansible_architecture] }}/{{ item }}"
+        dest: /usr/local/bin/{{ item }}
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+      loop: [etcd, etcdctl]
+      notify: Restart etcd
+
+- name: Render etcd environment
+  ansible.builtin.template:
+    src: etcd.env.j2
+    dest: /etc/etcd/etcd.env
+    mode: "0640"
+    owner: etcd
+    group: etcd
+  notify: Restart etcd
+
+- name: Install etcd systemd unit
+  ansible.builtin.template:
+    src: etcd.service.j2
+    dest: /etc/systemd/system/etcd.service
+    mode: "0644"
+  notify: Restart etcd
+
+- name: Start etcd
+  ansible.builtin.systemd:
+    name: etcd
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Flush handlers so the cluster forms before dependants run
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for etcd cluster health
+  ansible.builtin.command:
+    cmd: /usr/local/bin/etcdctl --endpoints=http://127.0.0.1:{{ etcd_client_port }} endpoint health
+  register: etcd_health
+  until: etcd_health.rc == 0
+  retries: 12
+  delay: 5
+  changed_when: false
+  run_once: true

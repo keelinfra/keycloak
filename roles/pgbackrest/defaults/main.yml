@@ -1,0 +1,6 @@
+---
+pgbackrest_stanza: main
+pgbackrest_repo_path: /var/lib/pgbackrest
+pgbackrest_retention_full: 2
+# repo host = first member of the backup_repo group
+pgbackrest_repo_host: "{{ groups['backup_repo'][0] }}"

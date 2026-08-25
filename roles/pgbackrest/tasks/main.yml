@@ -1,0 +1,144 @@
+---
+- name: Install pgBackRest
+  ansible.builtin.apt:
+    name: pgbackrest
+    state: present
+
+- name: Ensure repo directory exists (repo host)
+  ansible.builtin.file:
+    path: "{{ pgbackrest_repo_path }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+  when: inventory_hostname == pgbackrest_repo_host
+
+# --- SSH mesh between postgres users (repo pulls, nodes push WAL) -------
+- name: Ensure postgres .ssh directory exists
+  ansible.builtin.file:
+    path: /var/lib/postgresql/.ssh
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+
+- name: Generate SSH key for postgres user
+  become: true
+  become_user: postgres
+  community.crypto.openssh_keypair:
+    path: /var/lib/postgresql/.ssh/id_ed25519
+    type: ed25519
+  register: pg_ssh_key
+
+- name: Collect public keys
+  ansible.builtin.set_fact:
+    pg_pubkey: "{{ pg_ssh_key.public_key }}"
+
+- name: Authorize every node's postgres key on every node
+  become: true
+  become_user: postgres
+  ansible.posix.authorized_key:
+    user: postgres
+    key: "{{ hostvars[item].pg_pubkey }}"
+  loop: "{{ groups['postgres'] }}"
+
+- name: Scan cluster host keys
+  ansible.builtin.command:
+    cmd: ssh-keyscan -T 5 {{ groups['postgres'] | join(' ') }}
+  register: keyscan
+  changed_when: false
+
+- name: Trust cluster host keys
+  become: true
+  become_user: postgres
+  ansible.builtin.copy:
+    content: "{{ keyscan.stdout }}\n"
+    dest: /var/lib/postgresql/.ssh/known_hosts
+    owner: postgres
+    group: postgres
+    mode: "0644"
+
+- name: Create pgbackrest config directory
+  ansible.builtin.file:
+    path: /etc/pgbackrest
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0750"
+
+- name: Render pgbackrest configuration
+  ansible.builtin.template:
+    src: pgbackrest.conf.j2
+    dest: /etc/pgbackrest/pgbackrest.conf
+    owner: postgres
+    group: postgres
+    mode: "0640"
+
+- name: Remove default pgbackrest conf dir marker
+  ansible.builtin.file:
+    path: /etc/pgbackrest.conf
+    state: absent
+
+- name: Create stanza (repo host)
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    cmd: pgbackrest --stanza={{ pgbackrest_stanza }} stanza-create
+  when: inventory_hostname == pgbackrest_repo_host
+  register: stanza_create
+  changed_when: "'already exists' not in stanza_create.stdout"
+
+- name: Point Patroni archive_command at pgBackRest
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:{{ patroni_rest_port | default(8008) }}/config"
+    method: PATCH
+    user: patroni
+    password: "{{ vault_patroni_api_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      postgresql:
+        parameters:
+          archive_command: "pgbackrest --stanza={{ pgbackrest_stanza }} archive-push %p"
+    status_code: 200
+  run_once: true
+  changed_when: true
+
+- name: Wait for archive_command to propagate
+  ansible.builtin.pause:
+    seconds: 12
+  run_once: true
+
+- name: Verify stanza health
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    cmd: pgbackrest --stanza={{ pgbackrest_stanza }} check
+  when: inventory_hostname == pgbackrest_repo_host
+  changed_when: false
+  retries: 3
+  delay: 10
+  register: stanza_check
+  until: stanza_check.rc == 0
+
+- name: Install backup schedule (repo host)
+  ansible.builtin.template:
+    src: cron.j2
+    dest: /etc/cron.d/pgbackrest
+    mode: "0644"
+  when: inventory_hostname == pgbackrest_repo_host
+
+- name: Take initial full backup if repo is empty
+  become: true
+  become_user: postgres
+  ansible.builtin.shell: |
+    set -o pipefail
+    if ! pgbackrest --stanza={{ pgbackrest_stanza }} info --output=json | grep -q '"status":{"code":0'; then
+      pgbackrest --stanza={{ pgbackrest_stanza }} --type=full backup
+      echo "BACKUP_TAKEN"
+    fi
+  args:
+    executable: /bin/bash
+  when: inventory_hostname == pgbackrest_repo_host
+  register: initial_backup
+  changed_when: "'BACKUP_TAKEN' in initial_backup.stdout"

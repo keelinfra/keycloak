@@ -1,0 +1,34 @@
+---
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Ensure cluster nodes resolve each other via /etc/hosts
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} keelinfra cluster hosts"
+    block: |
+      {% for node in cluster_nodes %}
+      {{ node.host }} {{ node.name }}
+      {% endfor %}
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable time synchronisation
+  ansible.builtin.service:
+    name: chrony
+    state: started
+    enabled: true
+
+- name: Apply kernel parameters
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/90-keelinfra.conf
+    reload: true
+  loop: "{{ common_sysctl | dict2items }}"

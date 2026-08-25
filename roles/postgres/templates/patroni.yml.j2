@@ -1,0 +1,57 @@
+# Managed by keelinfra — Patroni configuration
+scope: {{ cluster_name }}
+name: {{ inventory_hostname }}
+
+etcd3:
+  hosts:
+{% for node in cluster_nodes %}
+    - {{ node.host }}:2379
+{% endfor %}
+
+restapi:
+  listen: {{ ansible_host }}:{{ patroni_rest_port }}
+  connect_address: {{ ansible_host }}:{{ patroni_rest_port }}
+  authentication:
+    username: patroni
+    password: {{ vault_patroni_api_password }}
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      parameters:
+        archive_mode: "on"
+        archive_command: /bin/true   # replaced by pgBackRest once the repo is set up
+        archive_timeout: 60s
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+  pg_hba:
+    - local all all peer
+    - host all all 127.0.0.1/32 scram-sha-256
+{% for node in cluster_nodes %}
+    - host all all {{ node.host }}/32 scram-sha-256
+    - host replication replicator {{ node.host }}/32 scram-sha-256
+{% endfor %}
+
+postgresql:
+  listen: "{{ ansible_host }},127.0.0.1:{{ postgres_port }}"
+  connect_address: {{ ansible_host }}:{{ postgres_port }}
+  data_dir: {{ postgres_data_dir }}
+  bin_dir: {{ postgres_bin_dir }}
+  pgpass: /var/lib/postgresql/.pgpass_patroni
+  authentication:
+    superuser:
+      username: postgres
+      password: {{ vault_postgres_superuser_password }}
+    replication:
+      username: replicator
+      password: {{ vault_postgres_replication_password }}
+  parameters:
+{% for k, v in postgres_parameters.items() %}
+    {{ k }}: {{ v }}
+{% endfor %}

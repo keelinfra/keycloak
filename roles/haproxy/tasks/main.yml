@@ -1,0 +1,28 @@
+---
+- name: Install HAProxy and socat
+  ansible.builtin.apt:
+    name: [haproxy, socat]
+    state: present
+
+- name: Render haproxy configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    mode: "0644"
+    validate: haproxy -c -f %s
+  notify: Reload haproxy
+
+- name: Start haproxy
+  ansible.builtin.systemd:
+    name: haproxy
+    state: started
+    enabled: true
+
+- name: Apply pending configuration before health checks
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for PostgreSQL leader via haproxy
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ haproxy_pg_port }}"
+    timeout: 60

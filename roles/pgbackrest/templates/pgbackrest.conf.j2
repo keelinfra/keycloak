@@ -1,0 +1,30 @@
+# Managed by keelinfra
+[global]
+repo1-cipher-pass={{ vault_pgbackrest_cipher_pass }}
+repo1-cipher-type=aes-256-cbc
+repo1-retention-full={{ pgbackrest_retention_full }}
+process-max=2
+log-level-console=info
+log-level-file=detail
+start-fast=y
+{% if inventory_hostname == pgbackrest_repo_host %}
+repo1-path={{ pgbackrest_repo_path }}
+{% else %}
+repo1-host={{ pgbackrest_repo_host }}
+repo1-host-user=postgres
+{% endif %}
+
+[{{ pgbackrest_stanza }}]
+{% if inventory_hostname == pgbackrest_repo_host %}
+{% for node in cluster_nodes %}
+{% if node.name == pgbackrest_repo_host %}
+pg{{ loop.index }}-path={{ postgres_data_dir }}
+{% else %}
+pg{{ loop.index }}-host={{ node.name }}
+pg{{ loop.index }}-host-user=postgres
+pg{{ loop.index }}-path={{ postgres_data_dir }}
+{% endif %}
+{% endfor %}
+{% else %}
+pg1-path={{ postgres_data_dir }}
+{% endif %}

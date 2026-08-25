@@ -1,0 +1,49 @@
+# Managed by keelinfra
+global
+    log /dev/log local0
+    maxconn 4096
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    stats timeout 30s
+    user haproxy
+    group haproxy
+
+defaults
+    log global
+    mode tcp
+    option tcplog
+    timeout connect 5s
+    timeout client 30m
+    timeout server 30m
+    retries 2
+
+# ---- PostgreSQL: always route to the Patroni leader --------------------
+listen postgres_leader
+    bind 127.0.0.1:{{ haproxy_pg_port }}
+    mode tcp
+    option httpchk GET /primary
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+{% for node in cluster_nodes %}
+    server {{ node.name }} {{ node.host }}:{{ postgres_port | default(5432) }} check port {{ patroni_rest_port }}
+{% endfor %}
+
+# ---- Keycloak: TLS passthrough to all healthy nodes --------------------
+listen keycloak_https
+    bind *:{{ haproxy_https_port }}
+    mode tcp
+    balance roundrobin
+    option httpchk GET /health/ready
+    http-check expect status 200
+    default-server inter 3s fall 3 rise 2
+{% for node in cluster_nodes %}
+    server {{ node.name }} {{ node.host }}:{{ keycloak_https_port }} check port {{ keycloak_mgmt_port }} check-ssl verify none
+{% endfor %}
+
+# ---- Stats -------------------------------------------------------------
+listen stats
+    bind {{ ansible_host }}:{{ haproxy_stats_port }}
+    mode http
+    stats enable
+    stats uri /
+    stats auth admin:{{ vault_haproxy_stats_password }}
+    stats refresh 10s
