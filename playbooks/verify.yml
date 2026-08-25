@@ -1,0 +1,199 @@
+---
+# keelinfra/keycloak — health checks and operational drills.
+# ./verify                     → health only
+# ./verify --drill failover    → Patroni switchover + write test
+# ./verify --drill restore     → pgBackRest restore to a scratch directory
+# ./verify --drill session     → login, rolling restart, session must survive
+# ./verify --drill all         → everything
+
+- name: Health checks
+  hosts: cluster
+  vars:
+    drill: health
+  tags: [health]
+  tasks:
+    - name: Patroni member state
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:{{ patroni_rest_port }}/health"
+        status_code: 200
+      changed_when: false
+
+    - name: Etcd endpoint health
+      ansible.builtin.command:
+        cmd: /usr/local/bin/etcdctl endpoint health
+      changed_when: false
+
+    - name: Keycloak readiness
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ keycloak_mgmt_port }}/health/ready"
+        validate_certs: false
+        status_code: 200
+      changed_when: false
+
+    - name: PostgreSQL reachable through haproxy
+      become: true
+      become_user: postgres
+      community.postgresql.postgresql_query:
+        login_host: 127.0.0.1
+        port: "{{ haproxy_pg_port }}"
+        login_user: "{{ keycloak_db_user }}"
+        login_password: "{{ vault_keycloak_db_password }}"
+        db: "{{ keycloak_db_name }}"
+        query: SELECT 1
+      changed_when: false
+
+    - name: Cluster summary
+      ansible.builtin.command:
+        cmd: patronictl -c /etc/patroni/config.yml list
+      register: patroni_list
+      changed_when: false
+      run_once: true
+
+    - name: Show cluster
+      ansible.builtin.debug:
+        msg: "{{ patroni_list.stdout_lines }}"
+      run_once: true
+
+- name: Failover drill
+  hosts: "{{ groups['postgres'][0] }}"
+  gather_facts: false
+  tasks:
+    - name: Run failover drill
+      when: drill | default('health') in ['failover', 'all']
+      block:
+        - name: Find current leader
+          ansible.builtin.command:
+            cmd: patronictl -c /etc/patroni/config.yml list -f json
+          register: cluster_state
+          changed_when: false
+
+        - name: Pick leader and a healthy replica
+          ansible.builtin.set_fact:
+            current_leader: >-
+              {{ (cluster_state.stdout | from_json)
+                 | selectattr('Role', 'equalto', 'Leader')
+                 | map(attribute='Member') | first }}
+            switch_target: >-
+              {{ (cluster_state.stdout | from_json)
+                 | selectattr('Role', 'equalto', 'Replica')
+                 | selectattr('State', 'equalto', 'streaming')
+                 | map(attribute='Member') | first }}
+
+        - name: Switch the PostgreSQL leader over to a replica
+          ansible.builtin.command:
+            cmd: patronictl -c /etc/patroni/config.yml switchover --leader {{ current_leader }} --candidate {{ switch_target }} --force
+          changed_when: true
+
+        - name: Write through haproxy after switchover
+          become: true
+          become_user: postgres
+          community.postgresql.postgresql_query:
+            login_host: 127.0.0.1
+            port: "{{ haproxy_pg_port }}"
+            login_user: "{{ keycloak_db_user }}"
+            login_password: "{{ vault_keycloak_db_password }}"
+            db: "{{ keycloak_db_name }}"
+            query: "CREATE TABLE IF NOT EXISTS keelinfra_drill (at timestamptz); INSERT INTO keelinfra_drill VALUES (now())"
+          register: write_test
+          retries: 10
+          delay: 3
+          until: write_test is succeeded
+          changed_when: true
+
+        - name: Failover drill passed
+          ansible.builtin.debug:
+            msg: "✓ switchover {{ current_leader }} → {{ switch_target }} complete, writes OK through haproxy"
+
+- name: Restore drill
+  hosts: backup_repo
+  gather_facts: false
+  tasks:
+    - name: Run restore drill
+      when: drill | default('health') in ['restore', 'all']
+      block:
+        - name: Clean scratch restore directory
+          ansible.builtin.file:
+            path: /var/tmp/keelinfra-restore-drill
+            state: absent
+
+        - name: Restore latest backup to scratch directory
+          become: true
+          become_user: postgres
+          ansible.builtin.command:
+            cmd: >-
+              pgbackrest --stanza=main restore
+              --pg1-path=/var/tmp/keelinfra-restore-drill
+              --type=none
+          changed_when: true
+
+        - name: Verify restored cluster files
+          ansible.builtin.stat:
+            path: /var/tmp/keelinfra-restore-drill/PG_VERSION
+          register: restored
+
+        - name: Restore drill result
+          ansible.builtin.assert:
+            that: restored.stat.exists
+            success_msg: "✓ restore to scratch directory OK"
+            fail_msg: "restore completed but PG_VERSION missing"
+
+        - name: Clean up scratch directory
+          ansible.builtin.file:
+            path: /var/tmp/keelinfra-restore-drill
+            state: absent
+
+- name: Session survival drill
+  hosts: "{{ groups['keycloak'][0] }}"
+  gather_facts: false
+  tasks:
+    - name: Run session drill
+      when: drill | default('health') in ['session', 'all']
+      block:
+        - name: Log in to demo realm (password grant)
+          ansible.builtin.uri:
+            url: "https://127.0.0.1:{{ keycloak_https_port }}/realms/demo/protocol/openid-connect/token"
+            method: POST
+            validate_certs: false
+            body_format: form-urlencoded
+            body:
+              grant_type: password
+              client_id: admin-cli
+              username: demo
+              password: demo12345
+            status_code: 200
+          register: login
+
+        - name: Rolling restart of every Keycloak node
+          ansible.builtin.systemd:
+            name: keycloak
+            state: restarted
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['keycloak'] }}"
+
+        - name: Wait for all nodes ready again
+          ansible.builtin.uri:
+            url: "https://{{ hostvars[item].ansible_host }}:{{ keycloak_mgmt_port }}/health/ready"
+            validate_certs: false
+            status_code: 200
+          register: ready
+          until: ready.status == 200
+          retries: 60
+          delay: 5
+          loop: "{{ groups['keycloak'] }}"
+
+        - name: Refresh the pre-restart session token
+          ansible.builtin.uri:
+            url: "https://127.0.0.1:{{ keycloak_https_port }}/realms/demo/protocol/openid-connect/token"
+            method: POST
+            validate_certs: false
+            body_format: form-urlencoded
+            body:
+              grant_type: refresh_token
+              client_id: admin-cli
+              refresh_token: "{{ login.json.refresh_token }}"
+            status_code: 200
+          register: refreshed
+
+        - name: Session drill result
+          ansible.builtin.debug:
+            msg: "✓ session created before restart is still valid after a full rolling restart — DB-persisted sessions work"

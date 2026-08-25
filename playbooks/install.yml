@@ -1,0 +1,55 @@
+---
+# keelinfra/keycloak — full stack install.
+# Orchestration order matters: data layer first, then Keycloak, then observability.
+
+- name: Prepare all nodes
+  hosts: cluster
+  roles:
+    - common
+
+- name: Deploy etcd cluster
+  hosts: etcd
+  roles:
+    - etcd
+
+- name: Deploy PostgreSQL HA (Patroni)
+  hosts: postgres
+  roles:
+    - postgres
+
+- name: Deploy HAProxy
+  hosts: haproxy
+  roles:
+    - haproxy
+
+- name: Deploy pgBackRest
+  hosts: postgres
+  roles:
+    - pgbackrest
+
+- name: Deploy TLS material
+  hosts: cluster
+  roles:
+    - tls
+
+- name: Deploy Keycloak cluster
+  hosts: keycloak
+  roles:
+    - keycloak
+
+- name: Apply realm configuration
+  hosts: keycloak
+  roles:
+    - role: config_cli
+      when: inventory_hostname == groups['keycloak'][0]
+
+- name: Deploy VIP (only when a vip is configured)
+  hosts: haproxy
+  roles:
+    - role: keepalived
+      when: cluster_vip | length > 0
+
+- name: Deploy monitoring
+  hosts: cluster
+  roles:
+    - monitoring

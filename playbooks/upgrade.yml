@@ -1,0 +1,212 @@
+---
+# keelinfra/keycloak — upgrade orchestration.
+#   patch  (26.6.0 → 26.6.2): rolling, zero downtime — nodes drained one at a time
+#   minor  (26.6.x → 26.7.y): stop-start — sessions survive in PostgreSQL
+# A pgBackRest backup is always taken first. See UPGRADES.md.
+
+- name: Preflight
+  hosts: keycloak
+  any_errors_fatal: true
+  tasks:
+    - name: Validate target version
+      ansible.builtin.assert:
+        that: keycloak_target_version is match('^26\.[0-9]+\.[0-9]+$')
+        fail_msg: "target must look like 26.x.y (got: {{ keycloak_target_version | default('') }})"
+
+    - name: Read current version from the active symlink
+      ansible.builtin.stat:
+        path: /opt/keycloak/current
+      register: current_link
+
+    - name: Set version facts
+      ansible.builtin.set_fact:
+        kc_from: "{{ current_link.stat.lnk_target | basename | regex_replace('^keycloak-', '') }}"
+        kc_to: "{{ keycloak_target_version }}"
+
+    - name: Classify upgrade
+      ansible.builtin.set_fact:
+        upgrade_kind: >-
+          {{ 'noop' if kc_from == kc_to
+             else 'patch' if (kc_from.split('.')[:2] == kc_to.split('.')[:2])
+             else 'minor' }}
+        minor_gap: "{{ (kc_to.split('.')[1] | int) - (kc_from.split('.')[1] | int) }}"
+
+    - name: Nothing to do
+      ansible.builtin.meta: end_play
+      when: upgrade_kind == 'noop'
+
+    - name: Refuse downgrade and multi-minor jumps without --force
+      ansible.builtin.assert:
+        that:
+          - kc_to is version(kc_from, '>')
+          - (minor_gap | int) <= 1 or (upgrade_force | default(false) | bool)
+        fail_msg: >-
+          {{ kc_from }} → {{ kc_to }}: downgrades are not supported, and skipping
+          more than one minor version is outside upstream's supported migration
+          path. Upgrade one minor at a time, or re-run with --force.
+      run_once: true
+
+    - name: Announce plan
+      ansible.builtin.debug:
+        msg: "Upgrading {{ kc_from }} → {{ kc_to }} ({{ upgrade_kind }} strategy)"
+      run_once: true
+
+- name: Pre-upgrade backup
+  hosts: backup_repo
+  any_errors_fatal: true
+  tasks:
+    - name: Take a differential backup before touching anything
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: pgbackrest --stanza=main --type=diff backup
+      changed_when: true
+      when: hostvars[groups['keycloak'][0]].upgrade_kind != 'noop'
+
+# ---------------------------------------------------------------- rolling ----
+- name: Rolling patch upgrade
+  hosts: keycloak
+  serial: 1
+  any_errors_fatal: true
+  tasks:
+    - name: Rolling upgrade this node
+      when: hostvars[groups['keycloak'][0]].upgrade_kind == 'patch'
+      block:
+        - name: Stage target version (service keeps running)
+          ansible.builtin.include_role:
+            name: keycloak
+            tasks_from: deploy_version
+          vars:
+            keycloak_version: "{{ keycloak_target_version }}"
+            kc_switch_symlink: false
+
+        - name: Drain node on every load balancer
+          ansible.builtin.command:
+            cmd: >-
+              sh -c 'echo "disable server keycloak_https/{{ inventory_hostname }}"
+              | socat stdio /run/haproxy/admin.sock'
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['haproxy'] }}"
+          changed_when: true
+
+        - name: Wait for in-flight requests to finish
+          ansible.builtin.pause:
+            seconds: 5
+
+        - name: Cut over to {{ keycloak_target_version }}
+          ansible.builtin.file:
+            src: /opt/keycloak/keycloak-{{ keycloak_target_version }}
+            dest: /opt/keycloak/current
+            state: link
+            owner: keycloak
+            group: keycloak
+
+        - name: Restart on the new version
+          ansible.builtin.systemd:
+            name: keycloak
+            state: restarted
+            daemon_reload: true
+
+        - name: Wait for readiness
+          ansible.builtin.uri:
+            url: "https://127.0.0.1:{{ keycloak_mgmt_port }}/health/ready"
+            validate_certs: false
+            status_code: 200
+          register: kc_ready
+          until: kc_ready.status == 200
+          retries: 60
+          delay: 5
+
+        - name: Return node to every load balancer
+          ansible.builtin.command:
+            cmd: >-
+              sh -c 'echo "enable server keycloak_https/{{ inventory_hostname }}"
+              | socat stdio /run/haproxy/admin.sock'
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['haproxy'] }}"
+          changed_when: true
+
+# ------------------------------------------------------------- stop-start ----
+- name: Stop-start minor upgrade
+  hosts: keycloak
+  any_errors_fatal: true
+  tasks:
+    - name: Minor upgrade
+      when: hostvars[groups['keycloak'][0]].upgrade_kind == 'minor'
+      block:
+        - name: Stage target version on all nodes (service keeps running)
+          ansible.builtin.include_role:
+            name: keycloak
+            tasks_from: deploy_version
+          vars:
+            keycloak_version: "{{ keycloak_target_version }}"
+            kc_switch_symlink: false
+
+        - name: Stop all Keycloak nodes
+          ansible.builtin.systemd:
+            name: keycloak
+            state: stopped
+
+        - name: Cut over to {{ keycloak_target_version }}
+          ansible.builtin.file:
+            src: /opt/keycloak/keycloak-{{ keycloak_target_version }}
+            dest: /opt/keycloak/current
+            state: link
+            owner: keycloak
+            group: keycloak
+
+        - name: Start first node (runs schema migrations)
+          ansible.builtin.systemd:
+            name: keycloak
+            state: started
+            daemon_reload: true
+          when: inventory_hostname == groups['keycloak'][0]
+
+        - name: Wait for first node readiness
+          ansible.builtin.uri:
+            url: "https://127.0.0.1:{{ keycloak_mgmt_port }}/health/ready"
+            validate_certs: false
+            status_code: 200
+          register: kc_ready_first
+          until: kc_ready_first.status == 200
+          retries: 60
+          delay: 5
+          when: inventory_hostname == groups['keycloak'][0]
+
+        - name: Start remaining nodes
+          ansible.builtin.systemd:
+            name: keycloak
+            state: started
+            daemon_reload: true
+          when: inventory_hostname != groups['keycloak'][0]
+
+        - name: Wait for all nodes readiness
+          ansible.builtin.uri:
+            url: "https://127.0.0.1:{{ keycloak_mgmt_port }}/health/ready"
+            validate_certs: false
+            status_code: 200
+          register: kc_ready_rest
+          until: kc_ready_rest.status == 200
+          retries: 60
+          delay: 5
+
+# ---------------------------------------------------------------- persist ----
+- name: Persist new version in the inventory
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Update keycloak_version in generated group_vars
+      ansible.builtin.lineinfile:
+        path: "{{ playbook_dir }}/../inventory/group_vars/all/cluster.yml"
+        regexp: '^keycloak_version:'
+        line: 'keycloak_version: "{{ keycloak_target_version }}"'
+      when: hostvars[groups['keycloak'][0]].upgrade_kind | default('noop') != 'noop'
+
+    - name: Remind about the source definition
+      ansible.builtin.debug:
+        msg: >-
+          Upgrade complete. Update keycloak_version in your cluster definition
+          file too, so a future ./configure doesn't roll it back.
+      when: hostvars[groups['keycloak'][0]].upgrade_kind | default('noop') != 'noop'
