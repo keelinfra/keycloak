@@ -1,0 +1,45 @@
+# Managed by keelinfra — the alerts that actually page you
+groups:
+  - name: keelinfra-core
+    rules:
+      - alert: KeycloakDown
+        expr: up{job="keycloak"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Keycloak on {{ '{{ $labels.instance }}' }} is down"
+
+      - alert: PostgresDown
+        expr: up{job="patroni"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "Patroni/PostgreSQL on {{ '{{ $labels.instance }}' }} is down"
+
+      - alert: NoPostgresLeader
+        expr: sum(patroni_master) == 0 or absent(patroni_master)
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "PostgreSQL cluster has no leader — writes are failing"
+
+      - alert: PostgresReplicationLag
+        expr: patroni_xlog_replayed_location_lag_bytes > 104857600
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Replica {{ '{{ $labels.instance }}' }} is {{ '{{ $value | humanize1024 }}' }}B behind"
+
+      - alert: BackupTooOld
+        expr: time() - pgbackrest_last_backup_timestamp > 93600
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: "Last pgBackRest backup is older than 26 hours"
+
+      - alert: DiskAlmostFull
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.15
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ '{{ $labels.instance }}' }} root filesystem below 15% free"

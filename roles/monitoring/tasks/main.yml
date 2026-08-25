@@ -1,0 +1,131 @@
+---
+# --- every node: exporters ---------------------------------------------
+- name: Install node exporter
+  ansible.builtin.apt:
+    name: prometheus-node-exporter
+    state: present
+
+- name: Install postgres exporter
+  ansible.builtin.apt:
+    name: prometheus-postgres-exporter
+    state: present
+
+- name: Configure postgres exporter connection
+  ansible.builtin.copy:
+    content: >
+      # Managed by keelinfra{{ '\n' }}DATA_SOURCE_NAME="postgresql://postgres:{{
+      vault_postgres_superuser_password }}@127.0.0.1:{{ postgres_port }}/postgres?sslmode=disable"
+    dest: /etc/default/prometheus-postgres-exporter
+    mode: "0600"
+  register: pgexp_conf
+
+- name: Restart postgres exporter
+  ansible.builtin.systemd:
+    name: prometheus-postgres-exporter
+    state: "{{ 'restarted' if pgexp_conf.changed else 'started' }}"
+    enabled: true
+
+- name: Ensure node exporter runs
+  ansible.builtin.systemd:
+    name: prometheus-node-exporter
+    state: started
+    enabled: true
+
+# --- monitoring host: prometheus + grafana + backup metrics ------------
+- name: Install Prometheus (monitoring host)
+  ansible.builtin.apt:
+    name: prometheus
+    state: present
+  when: inventory_hostname == monitoring_host
+
+- name: Configure Prometheus
+  when: inventory_hostname == monitoring_host
+  block:
+    - name: Create rules directory
+      ansible.builtin.file:
+        path: /etc/prometheus/rules
+        state: directory
+        mode: "0755"
+
+    - name: Render prometheus configuration
+      ansible.builtin.template:
+        src: prometheus.yml.j2
+        dest: /etc/prometheus/prometheus.yml
+        mode: "0644"
+      register: prom_conf
+
+    - name: Render alert rules
+      ansible.builtin.template:
+        src: alerts.yml.j2
+        dest: /etc/prometheus/rules/keelinfra.yml
+        mode: "0644"
+      register: prom_rules
+
+    - name: Restart prometheus
+      ansible.builtin.systemd:
+        name: prometheus
+        state: "{{ 'restarted' if (prom_conf.changed or prom_rules.changed) else 'started' }}"
+        enabled: true
+
+    - name: Install pgbackrest metrics exporter script
+      ansible.builtin.template:
+        src: pgbackrest-metrics.sh.j2
+        dest: /usr/local/bin/pgbackrest-metrics
+        mode: "0755"
+
+    - name: Ensure textfile collector directory exists
+      ansible.builtin.file:
+        path: "{{ textfile_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Schedule pgbackrest metrics export
+      ansible.builtin.copy:
+        content: "*/15 * * * * root /usr/local/bin/pgbackrest-metrics\n"
+        dest: /etc/cron.d/pgbackrest-metrics
+        mode: "0644"
+
+    - name: Run metrics export once now
+      ansible.builtin.command: /usr/local/bin/pgbackrest-metrics
+      changed_when: false
+
+- name: Install and configure Grafana (monitoring host)
+  when: inventory_hostname == monitoring_host
+  block:
+    - name: Add Grafana repository
+      ansible.builtin.deb822_repository:
+        name: grafana
+        types: deb
+        uris: https://apt.grafana.com
+        suites: stable
+        components: main
+        signed_by: https://apt.grafana.com/gpg.key
+
+    - name: Install Grafana
+      ansible.builtin.apt:
+        name: grafana
+        state: present
+        update_cache: true
+
+    - name: Set Grafana admin password
+      community.general.ini_file:
+        path: /etc/grafana/grafana.ini
+        section: security
+        option: admin_password
+        value: "{{ vault_grafana_admin_password }}"
+        mode: "0640"
+      register: grafana_conf
+
+    - name: Provision Prometheus datasource
+      ansible.builtin.template:
+        src: grafana-datasource.yml.j2
+        dest: /etc/grafana/provisioning/datasources/keelinfra.yml
+        mode: "0640"
+        group: grafana
+      register: grafana_ds
+
+    - name: Restart grafana
+      ansible.builtin.systemd:
+        name: grafana-server
+        state: "{{ 'restarted' if (grafana_conf.changed or grafana_ds.changed) else 'started' }}"
+        enabled: true

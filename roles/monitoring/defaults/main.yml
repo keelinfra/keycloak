@@ -1,0 +1,7 @@
+---
+prometheus_port: 9090
+grafana_port: 3000
+node_exporter_port: 9100
+postgres_exporter_port: 9187
+monitoring_host: "{{ groups['monitoring'][0] }}"
+textfile_dir: /var/lib/prometheus/node-exporter

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Managed by keelinfra — export last backup timestamp for Prometheus textfile collector
+set -euo pipefail
+out="{{ textfile_dir }}/pgbackrest.prom"
+ts=$(sudo -u postgres pgbackrest --stanza=main info --output=json 2>/dev/null \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["backup"][-1]["timestamp"]["stop"] if d and d[0].get("backup") else 0)')
+{
+  echo "# HELP pgbackrest_last_backup_timestamp Unix time of last completed backup"
+  echo "# TYPE pgbackrest_last_backup_timestamp gauge"
+  echo "pgbackrest_last_backup_timestamp $ts"
+} > "$out.tmp" && mv "$out.tmp" "$out"
