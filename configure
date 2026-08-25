@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# keelinfra/keycloak — configure: validate a cluster definition and render the inventory.
+# Usage: ./configure -c examples/ha-3node.yml
+set -euo pipefail
+cd "$(dirname "$0")"
+
+CONFIG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--config) CONFIG="$2"; shift 2 ;;
+    -h|--help)
+      echo "Usage: ./configure -c <cluster.yml>"
+      echo "Validates the cluster definition, checks SSH reachability,"
+      echo "generates secrets, and renders inventory/ for install/upgrade."
+      exit 0 ;;
+    *) echo "unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+[[ -n "$CONFIG" ]] || { echo "error: -c <cluster.yml> is required (try: ./configure -c examples/ha-3node.yml)" >&2; exit 1; }
+[[ -f "$CONFIG" ]] || { echo "error: config file not found: $CONFIG" >&2; exit 1; }
+
+command -v ansible-playbook >/dev/null || {
+  echo "error: ansible not found. Install it first:" >&2
+  echo "  macOS:  brew install ansible" >&2
+  echo "  Ubuntu: sudo apt install -y ansible" >&2
+  exit 1
+}
+
+ansible-galaxy collection install -r requirements.yml >/dev/null
+
+# Vault password must exist before ansible-vault encrypt runs
+mkdir -p inventory
+if [[ ! -f inventory/.vault_pass ]]; then
+  openssl rand -base64 32 | tr -d '/+=\n' > inventory/.vault_pass
+  chmod 600 inventory/.vault_pass
+fi
+
+export ANSIBLE_VAULT_PASSWORD_FILE="$PWD/inventory/.vault_pass"
+
+# Render inventory + group_vars + secrets from the cluster definition.
+ansible-playbook playbooks/configure.yml \
+  -i localhost, -c local \
+  -e "config_file=$(cd "$(dirname "$CONFIG")" && pwd)/$(basename "$CONFIG")"
+
+echo
+echo "✓ configured. Next: ./install"

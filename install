@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# keelinfra/keycloak — install: bring up the full stack on the configured nodes.
+set -euo pipefail
+cd "$(dirname "$0")"
+[[ -f inventory/hosts.yml ]] || { echo "error: no inventory found — run ./configure first" >&2; exit 1; }
+export ANSIBLE_VAULT_PASSWORD_FILE="$PWD/inventory/.vault_pass"
+exec ansible-playbook playbooks/install.yml "$@"

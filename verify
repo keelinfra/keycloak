@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# keelinfra/keycloak — verify: health checks + failover/restore/session drills.
+# Usage: ./verify [--drill failover|restore|session|all]
+set -euo pipefail
+cd "$(dirname "$0")"
+DRILL="health"
+[[ "${1:-}" == "--drill" ]] && DRILL="${2:-all}"
+[[ -f inventory/hosts.yml ]] || { echo "error: no inventory found — run ./configure first" >&2; exit 1; }
+export ANSIBLE_VAULT_PASSWORD_FILE="$PWD/inventory/.vault_pass"
+exec ansible-playbook playbooks/verify.yml -e "drill=$DRILL"
