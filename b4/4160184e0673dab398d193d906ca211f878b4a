@@ -1,0 +1,30 @@
+roles/monitoring/templates/alerts.yml.j2
+  s_daf9a6a1e085cf::t_69e1fea4b7e1ea 1-45
+roles/monitoring/templates/pgbackrest-metrics.sh.j2
+  s_daf9a6a1e085cf::t_69e1fea4b7e1ea 1-11
+roles/monitoring/templates/prometheus.yml.j2
+  s_daf9a6a1e085cf::t_69e1fea4b7e1ea 1-46
+roles/monitoring/templates/grafana-datasource.yml.j2
+  s_daf9a6a1e085cf::t_69e1fea4b7e1ea 1-7
+roles/monitoring/defaults/main.yml
+  s_daf9a6a1e085cf::t_69e1fea4b7e1ea 1-7
+roles/monitoring/tasks/main.yml
+  s_daf9a6a1e085cf::t_93081de4279b23 1-14,18-131
+  s_daf9a6a1e085cf::t_488b52e481c7df 15-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "b44160184e0673dab398d193d906ca211f878b4a",
+  "prompts": {},
+  "sessions": {
+    "s_daf9a6a1e085cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00e14330-d378-4b7d-9ecb-68cf59eb16b3",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
