@@ -27,6 +27,10 @@ all:
       children: { cluster: }
     haproxy:
       children: { cluster: }
+    # first node: schema migrations, drills, and other run-once plays
+    primary:
+      hosts:
+        {{ cfg.nodes[0].name }}:
     monitoring:
       hosts:
         {{ cfg.nodes[0].name }}:
