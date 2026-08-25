@@ -1,0 +1,33 @@
+playbooks/install.yml
+  s_daf9a6a1e085cf::t_f87e02a3e3a61a 1-28
+  s_daf9a6a1e085cf::t_efbda68611c41d 46-51
+  s_daf9a6a1e085cf::t_0cdd074363e22c 31-32,37,42,45,52-55
+  s_daf9a6a1e085cf::t_e3a0daf328e578 29-30,33-36,38-41,43-44
+playbooks/upgrade.yml
+  s_daf9a6a1e085cf::t_5950dbed044164 197
+  s_daf9a6a1e085cf::t_a575594d6199a3 59
+  s_daf9a6a1e085cf::t_8fbb6fb1809f1a 75-82,96-102,137,143-156
+  s_daf9a6a1e085cf::t_2b128f750786be 1-58,60-74,83-95,103-136,138-142,157-196,198-212
+playbooks/verify.yml
+  s_daf9a6a1e085cf::t_488b52e481c7df 72-80
+  s_daf9a6a1e085cf::t_be17a6b686e631 82
+  s_daf9a6a1e085cf::t_de168a9534b163 120
+  s_daf9a6a1e085cf::t_91bfec009fffd2 34,88
+  s_daf9a6a1e085cf::t_e94e9abd697c93 1-33,35-71,81,83-87,89-119,121-199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "3add3dbbe9d5e4a3be52e79801cc87508bff9833",
+  "prompts": {},
+  "sessions": {
+    "s_daf9a6a1e085cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00e14330-d378-4b7d-9ecb-68cf59eb16b3",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
