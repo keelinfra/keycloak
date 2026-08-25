@@ -31,7 +31,7 @@
   become: true
   become_user: keycloak
   ansible.builtin.command:
-    cmd: java -jar {{ config_cli_dir }}/keycloak-config-cli.jar
+    cmd: "{{ java_home }}/bin/java -jar {{ config_cli_dir }}/keycloak-config-cli.jar"
   environment:
     KEYCLOAK_URL: "https://127.0.0.1:{{ keycloak_https_port | default(8443) }}"
     KEYCLOAK_USER: admin

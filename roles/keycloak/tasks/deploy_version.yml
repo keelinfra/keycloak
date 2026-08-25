@@ -48,6 +48,8 @@
   become_user: keycloak
   ansible.builtin.command:
     cmd: "{{ keycloak_home }}/keycloak-{{ keycloak_version }}/bin/kc.sh build"
+  environment:
+    JAVA_HOME: "{{ java_home }}"
   when: (build_stamp.content | default('') | b64decode | trim) != kc_conf.checksum
   changed_when: true
   register: kc_build

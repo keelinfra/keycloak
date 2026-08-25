@@ -12,3 +12,6 @@ haproxy_pg_port: 5433
 keycloak_https_port: 8443
 keycloak_mgmt_port: 9000
 tls_dir: /etc/keelinfra/tls
+# Never rely on the host's default `java` — CI runners preinstall several
+# JDKs with an older one on PATH. Everything JVM-based points here.
+java_home: "/usr/lib/jvm/java-21-openjdk-{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"

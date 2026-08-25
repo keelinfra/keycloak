@@ -9,6 +9,7 @@ User=keycloak
 Group=keycloak
 EnvironmentFile={{ keycloak_conf_dir }}/secrets.env
 Environment=KC_HOME_DIR={{ keycloak_home }}/current
+Environment=JAVA_HOME={{ java_home }}
 Environment="JAVA_OPTS_KC_HEAP={{ keycloak_heap }}"
 ExecStart={{ keycloak_home }}/current/bin/kc.sh start --optimized
 Restart=on-failure
