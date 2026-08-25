@@ -1,0 +1,33 @@
+playbooks/group_vars/all.yml
+  s_daf9a6a1e085cf::t_2c22f7b8bef518 1-14
+playbooks/configure.yml
+  s_daf9a6a1e085cf::t_54de7b020efc7c 9,39-40,45,51,56,65
+  s_daf9a6a1e085cf::t_97293201ef5021 70-72
+  s_daf9a6a1e085cf::t_5950dbed044164 6
+  s_daf9a6a1e085cf::t_a9721ff7b58735 1-5,7-8,10-38,41-44,46-50,52-55,57-64,66-69,73-83,85-93,95-101
+  s_daf9a6a1e085cf::t_4968da5a3a5964 84,94
+playbooks/templates/cluster.yml.j2
+  s_daf9a6a1e085cf::t_a9721ff7b58735 1-13
+playbooks/templates/vault.yml.j2
+  s_daf9a6a1e085cf::t_a9721ff7b58735 1-10
+playbooks/templates/hosts.yml.j2
+  s_daf9a6a1e085cf::t_e3dcc3a5ae69a4 6-12
+  s_daf9a6a1e085cf::t_4968da5a3a5964 18-20
+  s_daf9a6a1e085cf::t_a9721ff7b58735 1-5,13-17,21-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "ac9d5aa49d67bf6205347a61930aaaccc0efe31e",
+  "prompts": {},
+  "sessions": {
+    "s_daf9a6a1e085cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00e14330-d378-4b7d-9ecb-68cf59eb16b3",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
