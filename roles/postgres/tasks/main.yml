@@ -63,13 +63,19 @@
     state: started
     enabled: true
 
+# /leader answers 200 only on the leader itself, so poll /cluster instead:
+# any member can report whether a leader has been elected. Accepting 503
+# here once skipped the keycloak-user creation on a slow bootstrap.
 - name: Wait for a Patroni leader to emerge
   ansible.builtin.uri:
-    url: "http://{{ ansible_host }}:{{ patroni_rest_port }}/leader"
-    status_code: [200, 503]
-  register: patroni_leader
-  until: patroni_leader.status in [200, 503]
-  retries: 30
+    url: "http://{{ ansible_host }}:{{ patroni_rest_port }}/cluster"
+    return_content: true
+  register: patroni_cluster
+  until: >-
+    patroni_cluster.status == 200
+    and (patroni_cluster.json.members | default([])
+         | selectattr('role', 'equalto', 'leader') | list | length > 0)
+  retries: 60
   delay: 5
   changed_when: false
 
