@@ -1,0 +1,21 @@
+---
+version: 2
+updates:
+  # GitHub Actions is currently the only Dependabot-supported ecosystem in
+  # this repo. Ansible collections (requirements.yml) and pinned component
+  # versions (Keycloak, etcd, ...) are not supported by Dependabot — those
+  # are covered by the upgrade-matrix CI (M2).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: ci
+      include: scope
+    labels:
+      - dependency
+      - github-actions
