@@ -1,0 +1,25 @@
+playbooks/group_vars/all.yml
+  s_daf9a6a1e085cf::t_a25af3e8fc0900 15-17
+roles/config_cli/tasks/main.yml
+  s_daf9a6a1e085cf::t_a25af3e8fc0900 34
+roles/keycloak/tasks/deploy_version.yml
+  s_daf9a6a1e085cf::t_a25af3e8fc0900 51-52
+roles/keycloak/templates/keycloak.service.j2
+  s_daf9a6a1e085cf::t_a25af3e8fc0900 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "47edf4e7c5062ad68c1ab8eabaf4701b118f4da1",
+  "prompts": {},
+  "sessions": {
+    "s_daf9a6a1e085cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00e14330-d378-4b7d-9ecb-68cf59eb16b3",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
