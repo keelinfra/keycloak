@@ -1,0 +1,52 @@
+---
+name: smoke
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Single-node install on the runner itself: proves every role deploys on a
+  # clean Ubuntu 24.04 with real systemd, and that a login session survives a
+  # restart. The full 3-node HA matrix runs locally (and in CI from M2 on).
+  single-node:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ansible
+        run: |
+          pipx install ansible-core
+          ansible-galaxy collection install -r requirements.yml
+
+      - name: Write single-node cluster definition
+        run: |
+          cat > /tmp/ci-cluster.yml <<CFG
+          ---
+          cluster_name: keycloak-ci
+          nodes:
+            - host: 127.0.0.1
+              name: ci-node1
+              connection: local
+          ssh_user: runner
+          domain: sso.ci.local
+          vip: ""
+          keycloak_version: "26.6.0"
+          tls_mode: selfsigned
+          CFG
+
+      - name: Configure
+        run: ./configure -c /tmp/ci-cluster.yml
+
+      - name: Install
+        run: ./install
+
+      - name: Health checks
+        run: |
+          curl -fsk https://127.0.0.1:9000/health/ready
+          curl -fsk --resolve sso.ci.local:443:127.0.0.1 \
+            https://sso.ci.local/realms/demo/.well-known/openid-configuration | grep -q issuer
+
+      - name: Session survives restart
+        run: ./verify --drill session
