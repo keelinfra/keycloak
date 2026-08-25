@@ -1,0 +1,25 @@
+.github/workflows/lint.yml
+  s_daf9a6a1e085cf::t_01c2cf12c0284c 12-13
+.github/workflows/smoke.yml
+  s_daf9a6a1e085cf::t_01c2cf12c0284c 16
+playbooks/templates/hosts.yml.j2
+  s_daf9a6a1e085cf::t_c7db7f6b4b2cc1 30-33
+playbooks/verify.yml
+  s_daf9a6a1e085cf::t_c7db7f6b4b2cc1 58,146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "14b76da7126ebbdefed32714fc836b2b69f28928",
+  "prompts": {},
+  "sessions": {
+    "s_daf9a6a1e085cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "00e14330-d378-4b7d-9ecb-68cf59eb16b3",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
