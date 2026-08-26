@@ -1,0 +1,36 @@
+UPGRADES.md
+  s_021f4e55466d20::t_6c970c59daca03 9-13
+.github/ISSUE_TEMPLATE/bug_report.yml
+  s_021f4e55466d20::t_3bd8c0581057b6 1-52
+.github/ISSUE_TEMPLATE/question.yml
+  s_021f4e55466d20::t_6504238a622fc4 1-17
+SECURITY.md
+  s_021f4e55466d20::t_7453f3fa23d544 1-29
+.github/workflows/upgrade-matrix.yml
+  s_021f4e55466d20::t_f83533744127f9 1-108
+.github/ISSUE_TEMPLATE/config.yml
+  s_021f4e55466d20::t_e9147c60e22187 1-9
+README.md
+  s_021f4e55466d20::t_36f6cc4c21c9ca 71
+  s_021f4e55466d20::t_9b63c5b7c26143 1-9,12-13
+  s_021f4e55466d20::t_62c5de6fab09d0 44-45
+  s_021f4e55466d20::t_bc3b659beaac5f 14
+examples/single-node.yml
+  s_021f4e55466d20::t_fe227cb203ff12 1-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "618380f1b5d8fe817dc9693588c65801ac68e11b",
+  "prompts": {},
+  "sessions": {
+    "s_021f4e55466d20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e6f21185-c836-4673-a35f-6e6e258035a1",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
