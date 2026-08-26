@@ -42,7 +42,7 @@ cd keycloak
 
 Single machine instead? Use `examples/single-node.yml` — same flow, no HA.
 
-Then open `https://<your-host>/admin` and you're done.
+Then open `https://<your-host>/admin` and you're done. Full docs: https://keelinfra.io/docs/keycloak/
 
 ## Requirements
 
@@ -73,7 +73,7 @@ Supported paths are listed in [UPGRADES.md](UPGRADES.md) and re-verified nightly
 
 ## Subscription
 
-The distribution is free and open source. A yearly subscription adds offline bundles, CVE tracking, upgrade runbooks, and direct access to the people who build it. Pricing is per node, not per user. → https://keelinfra.io/pricing
+The distribution is free and open source. A yearly subscription adds offline bundles, CVE tracking, upgrade runbooks, and direct access to the people who build it. $1,500 per node, per year — not per user. → https://keelinfra.io/pricing
 
 ## License
 

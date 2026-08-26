@@ -13,7 +13,7 @@ still refreshes on the target version.
 
 | From | To | Strategy | Sessions survive | Verified on | Notes |
 |---|---|---|---|---|---|
-| 26.6.0 | 26.6.2 | rolling | ✅ | 2026-08-25 | 156/156 probes OK during upgrade — zero downtime |
+| 26.6.0 | 26.6.2 | rolling | ✅ | 2026-08-25 | 156/156 probes OK during upgrade — zero downtime ([probe log](https://keelinfra.io/blog/zero-downtime-keycloak-upgrades/)) |
 | 26.6.2 | 26.7.0 | stop-start | ✅ | 2026-08-25 | ~16s service window measured (staged artifacts, stop → cut over → start); sessions persisted in PostgreSQL across the restart |
 
 ## Strategies
