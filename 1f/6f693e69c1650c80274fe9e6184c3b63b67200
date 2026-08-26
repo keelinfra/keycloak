@@ -1,0 +1,22 @@
+UPGRADES.md
+  s_021f4e55466d20::t_10de9d4b7d0f85 16
+README.md
+  s_021f4e55466d20::t_930af8f37d7fcf 45
+  s_021f4e55466d20::t_5cf0a7101bda9d 76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "1f6f693e69c1650c80274fe9e6184c3b63b67200",
+  "prompts": {},
+  "sessions": {
+    "s_021f4e55466d20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e6f21185-c836-4673-a35f-6e6e258035a1",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
