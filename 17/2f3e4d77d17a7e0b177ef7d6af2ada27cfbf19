@@ -1,0 +1,20 @@
+.github/workflows/upgrade-matrix.yml
+  s_021f4e55466d20::t_6b563067967fe4 75-78,84-87,93-94
+  s_021f4e55466d20::t_42d7689a2dec7a 63-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "172f3e4d77d17a7e0b177ef7d6af2ada27cfbf19",
+  "prompts": {},
+  "sessions": {
+    "s_021f4e55466d20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e6f21185-c836-4673-a35f-6e6e258035a1",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
