@@ -1,4 +1,16 @@
+<a href="https://keelinfra.io">
+  <picture>
+    <source media="(prefers-color-scheme: dark)"
+            srcset="https://raw.githubusercontent.com/keelinfra/.github/main/assets/wordmark-dark.svg">
+    <img alt="keelinfra" width="280"
+         src="https://raw.githubusercontent.com/keelinfra/.github/main/assets/wordmark-light.svg">
+  </picture>
+</a>
+
 # keelinfra/keycloak
+
+[![smoke](https://github.com/keelinfra/keycloak/actions/workflows/smoke.yml/badge.svg)](https://github.com/keelinfra/keycloak/actions/workflows/smoke.yml)
+[![upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml/badge.svg)](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml)
 
 **Production-ready, self-hosted Keycloak distribution.** HA, backups, monitoring, and tested upgrade paths — on your own infrastructure, in one command.
 
@@ -29,6 +41,8 @@ cd keycloak
 ./install                              # ~10 minutes on 3 clean VMs
 ```
 
+Single machine instead? Use `examples/single-node.yml` — same flow, no HA.
+
 Then open `https://<your-host>/admin` and you're done. Full docs: https://keelinfra.io/keycloak
 
 ## Requirements
@@ -54,7 +68,7 @@ Supported paths are listed in [UPGRADES.md](UPGRADES.md) and verified in CI. We 
 | Backup / PITR (pgBackRest, restore-tested) | 🟢 working |
 | Monitoring (Prometheus + Grafana + alerts) | 🟢 working |
 | Tested upgrades (rolling patch / stop-start minor) | 🟢 working — see [UPGRADES.md](UPGRADES.md) |
-| Upgrade matrix in CI | ⚪ planned |
+| Upgrade matrix in CI | 🟢 working — every supported path, nightly |
 | Single-node install | 🟡 CI smoke only |
 | Air-gapped bundle | ⚪ planned |
 

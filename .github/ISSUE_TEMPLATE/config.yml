@@ -1,0 +1,9 @@
+---
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/keelinfra/keycloak/security/advisories/new
+    about: Please report security issues privately — never in a public issue.
+  - name: Documentation
+    url: https://keelinfra.io/keycloak
+    about: Install guide, requirements, and upgrade documentation.

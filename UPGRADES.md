@@ -6,6 +6,11 @@ run `./upgrade`, and assert that logged-in sessions survive and data is intact.
 
 **We do not list an upgrade path we have not run.**
 
+Every listed path also runs nightly in CI on a clean single-node install
+([upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml)):
+install the source version, log in, upgrade, and assert the pre-upgrade session
+still refreshes on the target version.
+
 | From | To | Strategy | Sessions survive | Verified on | Notes |
 |---|---|---|---|---|---|
 | 26.6.0 | 26.6.2 | rolling | ✅ | 2026-08-25 | 156/156 probes OK during upgrade — zero downtime |

@@ -1,0 +1,31 @@
+---
+# keelinfra/keycloak cluster definition — single node.
+# Run:  ./configure -c examples/single-node.yml
+#
+# One machine running the full stack: Keycloak, PostgreSQL, backups,
+# monitoring. No HA — fine for evaluation, dev, or small internal setups.
+# Growing to 3 nodes later means a fresh 3-node install + realm import,
+# so start with examples/ha-3node.yml if HA is where you're headed.
+
+cluster_name: keycloak-single
+
+nodes:
+  - host: 10.0.0.11
+    name: kc-node1
+
+# SSH connection for Ansible (agent or key-based; password auth not supported)
+ssh_user: ubuntu
+# ssh_private_key: ~/.ssh/id_ed25519   # optional, defaults to agent
+
+# Public entrypoint. Users reach Keycloak at https://<domain>/
+domain: sso.example.com
+
+# No VIP on a single node.
+vip: ""
+
+# Keycloak version to install. Upgrades are driven by ./upgrade, not by editing this.
+keycloak_version: "26.6.0"
+
+# TLS: "selfsigned" generates a local CA and certs (good for eval/intranet).
+# Set to "custom" and drop your cert/key at files/tls/<domain>.crt|.key for production.
+tls_mode: selfsigned

@@ -1,0 +1,52 @@
+---
+name: Bug report
+description: Something in the install, upgrade, backup, or verify tooling misbehaved
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you run, and what went wrong? Include the exact command.
+      placeholder: "./upgrade --to 26.7.0 failed at the schema-migration step with ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: dropdown
+    id: topology
+    attributes:
+      label: Cluster shape
+      options:
+        - single node
+        - 3-node HA
+        - other (describe below)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Target OS
+      placeholder: Ubuntu 24.04
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Keycloak version and distribution commit
+      description: "`keycloak_version` from your cluster definition, plus `git rev-parse --short HEAD`"
+      placeholder: "26.6.2, a1b2c3d"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output / logs
+      description: >-
+        Failing task output from ansible, `journalctl -u keycloak`, `journalctl -u patroni` —
+        whatever applies. Redact hostnames and secrets.
+      render: shell

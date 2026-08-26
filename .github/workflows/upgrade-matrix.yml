@@ -1,0 +1,108 @@
+---
+name: upgrade matrix
+# Executes every upgrade path listed in UPGRADES.md, end-to-end, on a clean
+# single-node install: install the FROM version, log in, run ./upgrade, then
+# prove the pre-upgrade session still refreshes on the TO version.
+# The 3-node HA variant of each path runs locally before a path is listed.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - playbooks/upgrade.yml
+      - roles/keycloak/**
+      - .github/workflows/upgrade-matrix.yml
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    name: "${{ matrix.from }} → ${{ matrix.to }} (${{ matrix.strategy }})"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      # One row per supported path — keep in sync with UPGRADES.md.
+      matrix:
+        include:
+          - { from: "26.6.0", to: "26.6.2", strategy: rolling }
+          - { from: "26.6.2", to: "26.7.0", strategy: stop-start }
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install ansible
+        run: |
+          pipx install ansible-core
+          ansible-galaxy collection install -r requirements.yml
+
+      - name: Write single-node cluster definition (Keycloak ${{ matrix.from }})
+        run: |
+          cat > /tmp/ci-cluster.yml <<CFG
+          ---
+          cluster_name: keycloak-ci
+          nodes:
+            - host: 127.0.0.1
+              name: ci-node1
+              connection: local
+          ssh_user: runner
+          domain: sso.ci.local
+          vip: ""
+          keycloak_version: "${{ matrix.from }}"
+          tls_mode: selfsigned
+          CFG
+
+      - name: Install Keycloak ${{ matrix.from }}
+        run: |
+          ./configure -c /tmp/ci-cluster.yml
+          ./install
+
+      - name: Log in before the upgrade
+        run: |
+          refresh_token=$(curl -fsk --resolve sso.ci.local:443:127.0.0.1 \
+            -d grant_type=password -d client_id=admin-cli \
+            -d username=demo -d password=demo12345 \
+            https://sso.ci.local/realms/demo/protocol/openid-connect/token \
+            | jq -er .refresh_token)
+          echo "::add-mask::$refresh_token"
+          echo "REFRESH_TOKEN=$refresh_token" >> "$GITHUB_ENV"
+
+      - name: Upgrade to ${{ matrix.to }}
+        run: ./upgrade --to "${{ matrix.to }}"
+
+      - name: Assert the cluster runs ${{ matrix.to }}
+        run: |
+          target=$(readlink /opt/keycloak/current)
+          echo "active version: $target"
+          [[ "$(basename "$target")" == "keycloak-${{ matrix.to }}" ]]
+          curl -fsk https://127.0.0.1:9000/health/ready
+          curl -fsk --resolve sso.ci.local:443:127.0.0.1 \
+            https://sso.ci.local/realms/demo/.well-known/openid-configuration \
+            | jq -er .issuer
+
+      - name: Pre-upgrade session must survive the upgrade
+        run: |
+          curl -fsk --resolve sso.ci.local:443:127.0.0.1 \
+            -d grant_type=refresh_token -d client_id=admin-cli \
+            -d refresh_token="$REFRESH_TOKEN" \
+            https://sso.ci.local/realms/demo/protocol/openid-connect/token \
+            | jq -er .access_token > /dev/null
+          echo "✓ session created on ${{ matrix.from }} still refreshes on ${{ matrix.to }}"
+
+      - name: Full session drill on the new version
+        run: ./verify --drill session
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: |
+          echo "=== keycloak status ==="
+          sudo systemctl status keycloak --no-pager || true
+          echo "=== keycloak journal ==="
+          sudo journalctl -u keycloak --no-pager | tail -120 || true
+          echo "=== patroni journal ==="
+          sudo journalctl -u patroni --no-pager | tail -40 || true
+          echo "=== haproxy journal ==="
+          sudo journalctl -u haproxy --no-pager | tail -20 || true
+          echo "=== listeners ==="
+          sudo ss -tlnp || true
