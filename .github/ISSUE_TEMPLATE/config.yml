@@ -5,5 +5,5 @@ contact_links:
     url: https://github.com/keelinfra/keycloak/security/advisories/new
     about: Please report security issues privately — never in a public issue.
   - name: Documentation
-    url: https://keelinfra.io/keycloak
+    url: https://keelinfra.io/docs/keycloak/
     about: Install guide, requirements, and upgrade documentation.
