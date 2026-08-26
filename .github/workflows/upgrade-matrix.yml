@@ -60,7 +60,8 @@ jobs:
 
       - name: Log in before the upgrade
         run: |
-          refresh_token=$(curl -fsk --resolve sso.ci.local:443:127.0.0.1 \
+          refresh_token=$(curl -fsk --retry 10 --retry-delay 3 --retry-all-errors \
+            --resolve sso.ci.local:443:127.0.0.1 \
             -d grant_type=password -d client_id=admin-cli \
             -d username=demo -d password=demo12345 \
             https://sso.ci.local/realms/demo/protocol/openid-connect/token \
@@ -71,19 +72,26 @@ jobs:
       - name: Upgrade to ${{ matrix.to }}
         run: ./upgrade --to "${{ matrix.to }}"
 
+      # The stop-start strategy has a documented short service window
+      # (UPGRADES.md), and haproxy needs a couple of health-check rounds to
+      # mark the backend UP again — so checks through the LB get a retry
+      # budget. A cluster that is actually broken still fails after ~60s.
       - name: Assert the cluster runs ${{ matrix.to }}
         run: |
           target=$(readlink /opt/keycloak/current)
           echo "active version: $target"
           [[ "$(basename "$target")" == "keycloak-${{ matrix.to }}" ]]
-          curl -fsk https://127.0.0.1:9000/health/ready
-          curl -fsk --resolve sso.ci.local:443:127.0.0.1 \
+          curl -fsk --retry 10 --retry-delay 3 --retry-all-errors \
+            https://127.0.0.1:9000/health/ready
+          curl -fsk --retry 20 --retry-delay 3 --retry-all-errors \
+            --resolve sso.ci.local:443:127.0.0.1 \
             https://sso.ci.local/realms/demo/.well-known/openid-configuration \
             | jq -er .issuer
 
       - name: Pre-upgrade session must survive the upgrade
         run: |
-          curl -fsk --resolve sso.ci.local:443:127.0.0.1 \
+          curl -fsk --retry 20 --retry-delay 3 --retry-all-errors \
+            --resolve sso.ci.local:443:127.0.0.1 \
             -d grant_type=refresh_token -d client_id=admin-cli \
             -d refresh_token="$REFRESH_TOKEN" \
             https://sso.ci.local/realms/demo/protocol/openid-connect/token \
