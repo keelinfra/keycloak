@@ -29,8 +29,7 @@ keelinfra is the third option: a distribution you run yourself, with a subscript
 - **Backups & PITR** — pgBackRest, scheduled, restore-tested
 - **Observability** — Prometheus, Grafana dashboards, alert rules for the things that actually page you
 - **Config as code** — realms, clients, and roles managed via keycloak-config-cli
-- **Tested upgrade paths** — every upstream release is run through our upgrade matrix in CI before we tag support for it
-- **Offline / air-gapped install** — all artifacts bundled, no internet required at deploy time
+- **Tested upgrade paths** — every supported path runs nightly in the [upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml): install, log in, upgrade, and the pre-upgrade session must survive
 
 ## Quick start
 
@@ -43,7 +42,7 @@ cd keycloak
 
 Single machine instead? Use `examples/single-node.yml` — same flow, no HA.
 
-Then open `https://<your-host>/admin` and you're done. Full docs: https://keelinfra.io/keycloak
+Then open `https://<your-host>/admin` and you're done.
 
 ## Requirements
 
@@ -51,28 +50,26 @@ Then open `https://<your-host>/admin` and you're done. Full docs: https://keelin
 - SSH access with sudo
 - That's it — Ansible runs from the control node, nothing is pre-installed on targets
 
+## Don't take our word for it
+
+Every claim above is a drill you can run against your own cluster:
+
+```bash
+./verify                     # health of every component
+./verify --drill failover    # switch the PostgreSQL leader over, write through it
+./verify --drill restore     # restore the latest backup to a scratch directory
+./verify --drill session     # rolling-restart every node; logins must survive
+```
+
+CI runs a clean install plus the session drill on every commit, and the upgrade matrix re-proves every supported upgrade path nightly.
+
 ## Upgrades
 
 ```bash
 ./upgrade --to 26.7
 ```
 
-Supported paths are listed in [UPGRADES.md](UPGRADES.md) and verified in CI. We do not claim to support an upgrade path we have not run.
-
-## Status
-
-| Component | Status |
-|---|---|
-| 3-node HA install | 🟢 working |
-| PostgreSQL HA (Patroni, automatic failover) | 🟢 working |
-| Backup / PITR (pgBackRest, restore-tested) | 🟢 working |
-| Monitoring (Prometheus + Grafana + alerts) | 🟢 working |
-| Tested upgrades (rolling patch / stop-start minor) | 🟢 working — see [UPGRADES.md](UPGRADES.md) |
-| Upgrade matrix in CI | 🟢 working — every supported path, nightly |
-| Single-node install | 🟡 CI smoke only |
-| Air-gapped bundle | ⚪ planned |
-
-This project is young. Follow the roadmap or star the repo to watch it grow.
+Supported paths are listed in [UPGRADES.md](UPGRADES.md) and re-verified nightly in CI. We do not claim to support an upgrade path we have not run.
 
 ## Subscription
 
