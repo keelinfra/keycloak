@@ -64,10 +64,6 @@ This project is young. Follow the roadmap or star the repo to watch it grow.
 
 The distribution is free and open source. A yearly subscription adds offline bundles, CVE tracking, upgrade runbooks, and direct access to the people who build it. Pricing is per node, not per user. → https://keelinfra.io/pricing
 
-## Related
-
-- `keelinfra/openbao` — the same treatment for OpenBao (secrets), coming next
-
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
