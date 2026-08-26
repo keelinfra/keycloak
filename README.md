@@ -79,4 +79,4 @@ The distribution is free and open source. A yearly subscription adds offline bun
 
 Apache License 2.0. See [LICENSE](LICENSE).
 
-*Keycloak is a trademark of The Linux Foundation. keelinfra is an independent project and is not affiliated with or endorsed by The Linux Foundation, the Cloud Native Computing Foundation, Red Hat, or the Keycloak project.*
+*Keycloak is a trademark of The Linux Foundation. keelinfra is an independent project and is not affiliated with or endorsed by The Linux Foundation or the Keycloak project.*
