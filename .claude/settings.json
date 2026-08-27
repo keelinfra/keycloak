@@ -3,18 +3,5 @@
     "commit": "",
     "pr": "",
     "sessionUrl": false
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -n \"$CLAUDE_CODE_USER_EMAIL\" ] || exit 0; git config --global user.email \"$CLAUDE_CODE_USER_EMAIL\"; case \"$CLAUDE_CODE_USER_EMAIL\" in xianpeng.shen@gmail.com) n='Xianpeng Shen';; *) n=\"${CLAUDE_CODE_USER_EMAIL%%@*}\";; esac; git config --global user.name \"$n\"",
-            "statusMessage": "Setting git author identity from session account"
-          }
-        ]
-      }
-    ]
   }
 }
