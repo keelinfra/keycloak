@@ -29,6 +29,24 @@ fi
 cd "$SRC"
 test "$(git describe --tags)" = "$TAG"
 
+# Old tags hard-code raw.githubusercontent.com branch URLs in the ProtoStream
+# schema-compatibility check (model/infinispan/pom.xml, <remoteLockFiles>).
+# Upstream later moves release branches under archive/, so those URLs start
+# returning 404 and the build fails in keycloak-model-infinispan. Rewrite any
+# dead release/... URL to its archive/release/... location instead of skipping
+# the check (-DskipProtoLock) — serialization compatibility is a check an LTS
+# build wants to keep.
+POM="model/infinispan/pom.xml"
+if [ -f "$POM" ]; then
+  for ref in $(grep -o 'refs/heads/release/[0-9.]*' "$POM" | sort -u); do
+    url="https://raw.githubusercontent.com/keycloak/keycloak/$ref/model/infinispan/proto.lock"
+    if [ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" = "404" ]; then
+      sed -i "s|$ref/model|${ref/release\//archive\/release\/}/model|" "$POM"
+      echo "patched dead proto.lock URL: $ref -> ${ref/release\//archive\/release\/}"
+    fi
+  done
+fi
+
 # Server distribution only, tests skipped; the same scoped build the upstream
 # docs describe for producing the dist ZIP.
 ./mvnw -pl quarkus/deployment,quarkus/dist -am -DskipTests clean install
