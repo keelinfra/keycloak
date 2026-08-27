@@ -1,6 +1,10 @@
 ---
 keycloak_home: /opt/keycloak
 keycloak_conf_dir: /etc/keycloak
+# Where the server tarball comes from. Override to install a build that has
+# no upstream release artifact — e.g. an LTS build produced by
+# lts/build-from-tag.sh from an upstream maintenance tag (see lts/).
+keycloak_dist_url: "https://github.com/keycloak/keycloak/releases/download/{{ keycloak_version }}/keycloak-{{ keycloak_version }}.tar.gz"
 keycloak_heap: "-Xms512m -Xmx1024m"
 keycloak_db_url: "jdbc:postgresql://127.0.0.1:5433/keycloak"
 # first node bootstraps the schema before the others start
