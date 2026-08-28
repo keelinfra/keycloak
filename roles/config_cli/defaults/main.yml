@@ -1,8 +1,25 @@
 ---
-# adorsys/keycloak-config-cli: release tag is the tool version, the jar is
-# named after the newest Keycloak line it was built against.
+# adorsys/keycloak-config-cli: release tag is the tool version, each jar is
+# named after the Keycloak version it was built against.
 config_cli_release: "6.5.1"
-config_cli_kc_build: "26.5.5"
+# Jar builds shipped with the v6.5.1 release, oldest to newest.
+config_cli_kc_builds:
+  - "21.1.2"
+  - "22.0.4"
+  - "23.0.7"
+  - "24.0.5"
+  - "25.0.1"
+  - "26.0.5"
+  - "26.1.0"
+  - "26.5.5"
+# Pick the newest build not newer than the managed server: a jar built
+# against a newer Keycloak sends realm representations the older server
+# rejects (HTTP 400 "unable to read contents from stream").
+config_cli_kc_build: >-
+  {{ config_cli_kc_builds
+     | select('version', keycloak_version, '<=')
+     | list | last
+     | default(config_cli_kc_builds | first, true) }}
 config_cli_dir: /opt/keycloak-config-cli
 config_cli_base: https://github.com/adorsys/keycloak-config-cli/releases/download
 config_cli_jar_url: "{{ config_cli_base }}/v{{ config_cli_release }}/keycloak-config-cli-{{ config_cli_kc_build }}.jar"
