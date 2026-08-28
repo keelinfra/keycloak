@@ -1,0 +1,24 @@
+upgrade
+  s_f44e661f70bc5e::t_94f6919ee89618 3-5,9,14-15,23-25,27
+.github/workflows/lts-release.yml
+  s_f44e661f70bc5e::t_494704b9889384 41
+.github/workflows/upgrade-matrix.yml
+  s_f44e661f70bc5e::t_174d3701a09310 80-82
+  s_f44e661f70bc5e::t_62dabd68b5251e 28-30,35-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "4b247424a1f9533541d24384cd380ccc688f0058",
+  "prompts": {},
+  "sessions": {
+    "s_f44e661f70bc5e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ff4829c8-2258-43d1-8a29-618dd468d0a0",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
