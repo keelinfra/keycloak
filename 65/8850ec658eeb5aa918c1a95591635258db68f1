@@ -1,0 +1,19 @@
+roles/config_cli/defaults/main.yml
+  s_f44e661f70bc5e::t_9e6bc1c133cb0c 2-3,5-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "658850ec658eeb5aa918c1a95591635258db68f1",
+  "prompts": {},
+  "sessions": {
+    "s_f44e661f70bc5e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ff4829c8-2258-43d1-8a29-618dd468d0a0",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
