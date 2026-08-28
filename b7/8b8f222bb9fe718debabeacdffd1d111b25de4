@@ -1,0 +1,21 @@
+lts/CVE-MAP-26.2.md
+  s_f44e661f70bc5e::t_8f4960d5765cd0 1-106
+lts/collect-rhbk-cves.py
+  s_f44e661f70bc5e::t_a8cd3178512d10 1-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "b78b8f222bb9fe718debabeacdffd1d111b25de4",
+  "prompts": {},
+  "sessions": {
+    "s_f44e661f70bc5e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ff4829c8-2258-43d1-8a29-618dd468d0a0",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
