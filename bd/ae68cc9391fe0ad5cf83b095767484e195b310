@@ -1,0 +1,32 @@
+upgrade
+  s_f44e661f70bc5e::t_94f6919ee89618 3-5,9,14-15,23-25,27
+.github/workflows/lts-release.yml
+  s_f44e661f70bc5e::t_494704b9889384 41
+.github/workflows/upgrade-matrix.yml
+  s_f44e661f70bc5e::t_174d3701a09310 80-82
+  s_f44e661f70bc5e::t_62dabd68b5251e 28-30,35-38
+roles/config_cli/defaults/main.yml
+  s_f44e661f70bc5e::t_9e6bc1c133cb0c 2-3,5-22
+UPGRADES.md
+  s_f44e661f70bc5e::t_94b1fc782c96af 19-30
+lts/CVE-MAP-26.2.md
+  s_f44e661f70bc5e::t_8f4960d5765cd0 1-106
+lts/collect-rhbk-cves.py
+  s_f44e661f70bc5e::t_a8cd3178512d10 1-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "bdae68cc9391fe0ad5cf83b095767484e195b310",
+  "prompts": {},
+  "sessions": {
+    "s_f44e661f70bc5e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ff4829c8-2258-43d1-8a29-618dd468d0a0",
+        "model": "claude-fable-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
