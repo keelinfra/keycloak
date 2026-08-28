@@ -1,0 +1,89 @@
+---
+name: lts release
+# Builds a Keycloak server distribution from an upstream git tag with
+# lts/build-from-tag.sh and publishes it as a GitHub Release, so the
+# install/upgrade path can consume it via the keycloak_dist_url variable.
+# Covers the upstream maintenance tags (e.g. 26.2.6..26.2.16) that carry
+# backported fixes but have no published community artifacts — see
+# lts/VERIFICATION-26.2.9.md for the background.
+#
+# Release tags use the form kc-<upstream tag>-keel<revision> so they stay
+# separate from this repository's own version tags; bump the revision when
+# rebuilding the same upstream tag (e.g. after a build-script fix).
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Upstream Keycloak tag to build (e.g. 26.2.16)"
+        required: true
+        type: string
+      revision:
+        description: "KeelInfra build revision for this upstream tag"
+        required: false
+        default: "1"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: "${{ inputs.tag }} → kc-${{ inputs.tag }}-keel${{ inputs.revision }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      TAG: ${{ inputs.tag }}
+      REV: ${{ inputs.revision }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build server distribution from upstream tag
+        run: ./lts/build-from-tag.sh "$TAG" "$RUNNER_TEMP/lts"
+
+      - name: Collect artifacts and checksums
+        run: |
+          mkdir dist
+          cp "$RUNNER_TEMP/lts/kc-$TAG/quarkus/dist/target/keycloak-$TAG.tar.gz" dist/
+          cp "$RUNNER_TEMP/lts/kc-$TAG/quarkus/dist/target/keycloak-$TAG.zip" dist/
+          cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+
+      - name: Smoke-test the built distribution
+        run: |
+          tar xzf "dist/keycloak-$TAG.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/keycloak-$TAG/bin/kc.sh" --version | grep -F "Keycloak $TAG"
+          KC_BOOTSTRAP_ADMIN_USERNAME=admin KC_BOOTSTRAP_ADMIN_PASSWORD=ci-smoke-only \
+            "$RUNNER_TEMP/keycloak-$TAG/bin/kc.sh" start-dev --health-enabled=true &
+          for i in $(seq 1 60); do
+            sleep 2
+            curl -sf http://127.0.0.1:9000/health/ready > /dev/null && break
+          done
+          curl -sf http://127.0.0.1:9000/health/ready
+          curl -sf http://127.0.0.1:8080/realms/master/.well-known/openid-configuration > /dev/null
+          kill %1
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rel="kc-$TAG-keel$REV"
+          {
+            echo "Keycloak server distribution built from the upstream git tag \`$TAG\` with [\`lts/build-from-tag.sh\`](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/lts/build-from-tag.sh) — an upstream maintenance tag with no published community artifacts (see [why](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/lts/VERIFICATION-26.2.9.md))."
+            echo
+            echo "Built on this run from unmodified upstream sources; smoke-tested (version, health, OIDC discovery) before publishing. Verify downloads against \`SHA256SUMS\`."
+            echo
+            echo "Install with the distribution by setting:"
+            echo
+            echo '```yaml'
+            echo "keycloak_version: \"$TAG\""
+            echo "keycloak_dist_url: \"https://github.com/${{ github.repository }}/releases/download/$rel/keycloak-$TAG.tar.gz\""
+            echo '```'
+          } > notes.md
+          gh release create "$rel" dist/* \
+            --title "Keycloak $TAG (KeelInfra build $REV)" \
+            --notes-file notes.md
