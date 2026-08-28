@@ -25,10 +25,17 @@ jobs:
     strategy:
       fail-fast: false
       # One row per supported path — keep in sync with UPGRADES.md.
+      # dist_url (optional) installs the TO version from a non-upstream
+      # tarball — used for KeelInfra LTS builds of upstream maintenance tags
+      # that have no community artifacts (kc-*-keel* releases in this repo).
       matrix:
         include:
           - { from: "26.6.0", to: "26.6.2", strategy: rolling }
           - { from: "26.6.2", to: "26.7.0", strategy: stop-start }
+          - from: "26.2.5"
+            to: "26.2.16"
+            strategy: rolling
+            dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.2.16-keel1/keycloak-26.2.16.tar.gz"
     steps:
       - uses: actions/checkout@v7
 
@@ -70,7 +77,9 @@ jobs:
           echo "REFRESH_TOKEN=$refresh_token" >> "$GITHUB_ENV"
 
       - name: Upgrade to ${{ matrix.to }}
-        run: ./upgrade --to "${{ matrix.to }}"
+        env:
+          DIST_URL: ${{ matrix.dist_url }}
+        run: ./upgrade --to "${{ matrix.to }}" ${DIST_URL:+--dist-url "$DIST_URL"}
 
       # The stop-start strategy has a documented short service window
       # (UPGRADES.md), and haproxy needs a couple of health-check rounds to
