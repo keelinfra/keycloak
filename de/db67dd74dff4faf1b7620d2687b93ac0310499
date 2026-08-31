@@ -1,0 +1,37 @@
+examples/ha-3node.yml
+  s_7f1adbc2d0d553::t_8b27c2de8322b1 30
+examples/single-node.yml
+  s_7f1adbc2d0d553::t_498458d4c22320 27
+README.md
+  s_7f1adbc2d0d553::t_894928f2412e2c 69
+.github/workflows/upgrade-matrix.yml
+  s_7f1adbc2d0d553::t_065c791e62948b 27-29
+  s_7f1adbc2d0d553::t_f0b5836fde08c5 36-40
+.github/workflows/smoke.yml
+  s_7f1adbc2d0d553::t_5bc99577ce01eb 35
+UPGRADES.md
+  s_7f1adbc2d0d553::t_b6f1b3c5575ab6 20-47
+  s_7f1adbc2d0d553::t_95e363de76d02c 5-6
+  s_7f1adbc2d0d553::t_7192954aa3588a 70-83
+  s_7f1adbc2d0d553::t_57001d4a391532 18
+  s_7f1adbc2d0d553::t_491935397b3baa 19
+  s_7f1adbc2d0d553::t_bf227f6823d9f2 84
+dev/up.sh
+  s_7f1adbc2d0d553::t_e8f59a213a4bad 67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "dedb67dd74dff4faf1b7620d2687b93ac0310499",
+  "prompts": {},
+  "sessions": {
+    "s_7f1adbc2d0d553": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a20a60e4-0754-4f6e-a3f8-fc3350fea603",
+        "model": "claude-opus-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
