@@ -169,7 +169,7 @@
         - name: Open an offline session as well
           # Offline sessions persist through OFFLINE_USER_SESSION /
           # OFFLINE_CLIENT_SESSION — a different code path from online ones,
-          # and the one upstream issue 51920 reported write conflicts on.
+          # and the one upstream #51920 reported write conflicts on.
           ansible.builtin.uri:
             url: "{{ kc_token_url }}"
             method: POST
@@ -273,4 +273,4 @@
             msg: >-
               ✓ online and offline sessions opened before the restart both refresh after a
               full rolling restart, on the same session id, with identical roles and scopes.
-              Not covered: client session notes (upstream issue 52038) — see UPGRADES.md.
+              Not covered: client session notes (upstream #52038) — see UPGRADES.md.
