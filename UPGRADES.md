@@ -1,21 +1,24 @@
 # Supported upgrade paths
 
-Every path listed here has been executed end-to-end by our verification suite:
-install the source version on a 3-node HA cluster, create realms/users/sessions,
-run `./upgrade`, and assert that logged-in sessions survive — see "What the
-session drill proves" below for the exact assertions behind that claim.
+Every path listed here has been executed end-to-end: install the source version,
+create realms/users/sessions, run `./upgrade`, and assert that logged-in sessions
+survive — see "What the session drill proves" below for the exact assertions
+behind that claim.
 
 **We do not list an upgrade path we have not run.**
 
-Every listed path also runs nightly in CI on a clean single-node install
+Every listed path runs nightly in CI on a clean single-node install
 ([upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml)):
 install the source version, log in, upgrade, and assert the pre-upgrade session
-still refreshes on the target version.
+still refreshes on the target version. Some paths have additionally been drilled
+on a 3-node HA cluster — the Notes column says which.
 
 | From | To | Strategy | Sessions survive | Verified on | Notes |
 |---|---|---|---|---|---|
-| 26.6.0 | 26.6.2 | rolling | ✅ | 2026-08-25 | 156/156 probes OK during upgrade — zero downtime ([probe log](https://keelinfra.io/blog/zero-downtime-keycloak-upgrades/)) |
-| 26.6.2 | 26.7.0 | stop-start | ✅ | 2026-08-25 | ~16s service window measured (staged artifacts, stop → cut over → start); sessions persisted in PostgreSQL across the restart. **Do not stop here** — see "Do not land on 26.7.0–26.7.2" below |
+| 26.6.0 | 26.6.2 | rolling | ✅ | 2026-08-25 | **3-node HA drilled.** 156/156 probes OK during upgrade — zero downtime ([probe log](https://keelinfra.io/blog/zero-downtime-keycloak-upgrades/)) |
+| 26.6.2 | 26.7.0 | stop-start | ✅ | 2026-08-25 | **3-node HA drilled.** ~16s service window measured (staged artifacts, stop → cut over → start); sessions persisted in PostgreSQL across the restart. **Do not stop here** — see "Do not land on 26.7.0–26.7.2" below |
+| 26.6.2 | 26.7.3 | stop-start | ✅ | 2026-08-31 | **Single-node CI only** — the 3-node HA drill has not run against this target yet. Same stop-start path as the 26.7.0 row above, which was HA drilled |
+| 26.7.0 | 26.7.3 | rolling | ✅ | 2026-08-31 | **Single-node CI only** — the 3-node HA drill has not run yet. This is the way off 26.7.0–26.7.2 |
 
 ## Do not land on 26.7.0–26.7.2
 
@@ -34,17 +37,6 @@ fixes 20 CVEs and six weaknesses, and repairs regressions introduced inside the
 
 The 26.6.2 → 26.7.0 row above records a run we actually did, so it stays. It is
 not the version you should be running.
-
-## Pending verification
-
-These paths are in the [upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml)
-but have not yet completed a run. **They are not supported paths.** They move
-into the table above, with a date, once CI proves them — not before.
-
-| From | To | Strategy | Status |
-|---|---|---|---|
-| 26.6.2 | 26.7.3 | stop-start | first CI run pending |
-| 26.7.0 | 26.7.3 | rolling | first CI run pending |
 
 ## KeelInfra LTS builds
 
