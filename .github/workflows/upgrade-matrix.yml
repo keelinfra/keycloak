@@ -24,9 +24,8 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      # One row per path in UPGRADES.md — both the supported table and the
-      # "Pending verification" list. A pending row moves into the supported
-      # table only after it has passed here.
+      # One row per path in UPGRADES.md. A new path runs here first and is
+      # only listed as supported after it has passed.
       # dist_url (optional) installs the TO version from a non-upstream
       # tarball — used for KeelInfra LTS builds of upstream maintenance tags
       # that have no community artifacts (kc-*-keel* releases in this repo).
