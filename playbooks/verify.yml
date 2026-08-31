@@ -145,23 +145,51 @@
 - name: Session survival drill
   hosts: primary
   gather_facts: false
+  vars:
+    kc_token_url: "https://127.0.0.1:{{ keycloak_https_port }}/realms/demo/protocol/openid-connect/token"
   tasks:
     - name: Run session drill
       when: drill | default('health') in ['session', 'all']
       block:
-        - name: Log in to demo realm (password grant)
+        - name: Open an online session on the demo realm (password grant)
           ansible.builtin.uri:
-            url: "https://127.0.0.1:{{ keycloak_https_port }}/realms/demo/protocol/openid-connect/token"
+            url: "{{ kc_token_url }}"
             method: POST
             validate_certs: false
             body_format: form-urlencoded
             body:
               grant_type: password
-              client_id: admin-cli
+              client_id: keelinfra-drill
               username: demo
               password: demo12345
+              scope: openid
             status_code: 200
           register: login
+
+        - name: Open an offline session as well
+          # Offline sessions persist through OFFLINE_USER_SESSION /
+          # OFFLINE_CLIENT_SESSION — a different code path from online ones,
+          # and the one upstream #51920 reported write conflicts on.
+          ansible.builtin.uri:
+            url: "{{ kc_token_url }}"
+            method: POST
+            validate_certs: false
+            body_format: form-urlencoded
+            body:
+              grant_type: password
+              client_id: keelinfra-drill
+              username: demo
+              password: demo12345
+              scope: openid offline_access
+            status_code: 200
+          register: offline_login
+
+        - name: Read the claims of the pre-restart session
+          ansible.builtin.set_fact:
+            claims_before: >-
+              {{ ((login.json.access_token.split('.')[1] | replace('-', '+') | replace('_', '/'))
+                  ~ ('=' * ((4 - (login.json.access_token.split('.')[1] | length) % 4) % 4)))
+                 | b64decode | from_json }}
 
         - name: Rolling restart of every Keycloak node
           ansible.builtin.systemd:
@@ -181,19 +209,68 @@
           delay: 5
           loop: "{{ groups['keycloak'] }}"
 
-        - name: Refresh the pre-restart session token
+        - name: Refresh the pre-restart online session
           ansible.builtin.uri:
-            url: "https://127.0.0.1:{{ keycloak_https_port }}/realms/demo/protocol/openid-connect/token"
+            url: "{{ kc_token_url }}"
             method: POST
             validate_certs: false
             body_format: form-urlencoded
             body:
               grant_type: refresh_token
-              client_id: admin-cli
+              client_id: keelinfra-drill
               refresh_token: "{{ login.json.refresh_token }}"
             status_code: 200
           register: refreshed
 
+        - name: Refresh the pre-restart offline session
+          ansible.builtin.uri:
+            url: "{{ kc_token_url }}"
+            method: POST
+            validate_certs: false
+            body_format: form-urlencoded
+            body:
+              grant_type: refresh_token
+              client_id: keelinfra-drill
+              refresh_token: "{{ offline_login.json.refresh_token }}"
+            status_code: 200
+          register: offline_refreshed
+
+        - name: Read the claims of the restored session
+          ansible.builtin.set_fact:
+            claims_after: >-
+              {{ ((refreshed.json.access_token.split('.')[1] | replace('-', '+') | replace('_', '/'))
+                  ~ ('=' * ((4 - (refreshed.json.access_token.split('.')[1] | length) % 4) % 4)))
+                 | b64decode | from_json }}
+
+        - name: The restored session must be the same session, not a fresh login
+          ansible.builtin.assert:
+            that:
+              - claims_before.sid is defined
+              - claims_after.sid is defined
+              - claims_after.sid == claims_before.sid
+            fail_msg: >-
+              The refresh succeeded but came back on a different session id
+              ({{ claims_before.sid | default('none') }} → {{ claims_after.sid | default('none') }}).
+              The pre-restart session did not survive — the server issued a new one.
+
+        - name: Session contents must survive, not just the session id
+          # A refresh that returns 200 proves the session row is still there.
+          # It does not prove the session still carries what it carried before,
+          # which is the failure mode of the 26.7.x session-persistence bugs.
+          ansible.builtin.assert:
+            that:
+              - claims_after.preferred_username == claims_before.preferred_username
+              - (claims_after.realm_access.roles | default([]) | sort)
+                == (claims_before.realm_access.roles | default([]) | sort)
+              - ((claims_after.scope | default('')).split(' ') | sort)
+                == ((claims_before.scope | default('')).split(' ') | sort)
+            fail_msg: >-
+              The session survived the restart but its contents changed —
+              roles or scopes were lost on the way through the database.
+
         - name: Session drill result
           ansible.builtin.debug:
-            msg: "✓ session created before restart is still valid after a full rolling restart — DB-persisted sessions work"
+            msg: >-
+              ✓ online and offline sessions opened before the restart both refresh after a
+              full rolling restart, on the same session id, with identical roles and scopes.
+              Not covered: client session notes (upstream #52038) — see UPGRADES.md.

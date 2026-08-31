@@ -7,6 +7,17 @@ displayName: keelinfra demo realm
 registrationAllowed: false
 resetPasswordAllowed: true
 bruteForceProtected: true
+clients:
+  # Used by `./verify --drill session`. Declared here rather than relying on the
+  # built-in admin-cli so the drill asserts against a client whose configuration
+  # is fixed across every Keycloak version the upgrade matrix installs.
+  # Scopes are left at the realm defaults on purpose — offline_access is a
+  # default optional scope, and pinning the list would drift between versions.
+  - clientId: keelinfra-drill
+    enabled: true
+    publicClient: true
+    standardFlowEnabled: false
+    directAccessGrantsEnabled: true
 users:
   - username: demo
     enabled: true
