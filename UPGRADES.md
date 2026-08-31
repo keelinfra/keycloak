@@ -40,15 +40,31 @@ not the version you should be running.
 
 ## KeelInfra LTS builds
 
-Upstream cuts patch tags on maintenance branches (e.g. `26.2.6..26.2.16`)
-without publishing community artifacts — fixes on those tags ship only in
-Red Hat's commercial build. We build the tags ourselves and publish them as
+Upstream cuts patch tags on maintenance branches without publishing community
+artifacts — fixes on those tags ship only in Red Hat's commercial build. Two
+streams are in that state:
+
+| Stream | Community artifacts stop at | Tags continue to | Built and published |
+|---|---|---|---|
+| 26.2 | 26.2.5 | 26.2.16 | `kc-26.2.16-keel1` |
+| 26.6 | 26.6.4 | 26.6.6 | `kc-26.6.5-keel1`, `kc-26.6.6-keel1` |
+
+The 26.6 stream matters more than its size suggests: 26.6.4 → 26.6.6 carries
+**12 CVE fixes** in 69 commits, and a cluster left on 26.6.4 has no community
+route to any of them. Details and build evidence:
+[VERIFICATION-26.6.6.md](https://github.com/keelinfra/keycloak/blob/main/lts/VERIFICATION-26.6.6.md).
+
+We build the tags ourselves and publish them as
 [`kc-<version>-keel<rev>` releases](https://github.com/keelinfra/keycloak/releases)
 (see [lts/](lts/)); `./upgrade --dist-url <release url>` installs them.
 
 | From | To | Strategy | Sessions survive | Verified on | Notes |
 |---|---|---|---|---|---|
 | 26.2.5 | 26.2.16 ([kc-26.2.16-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.2.16-keel1)) | rolling | ✅ | 2026-08-28 | Single-node CI drill, runs nightly in the matrix: install the last community release, upgrade via `--dist-url`, pre-upgrade session refreshes, full session drill passes. The 3-node HA drill has **not** yet run for this path — Infinispan was upgraded within the 26.2 branch (15.0.16), so a multi-node rolling upgrade briefly mixes Infinispan versions; run the HA drill before relying on rolling there. |
+
+`26.6.4 → 26.6.6` is in the upgrade matrix but has not completed a run yet, so
+it is not listed above. The published tarballs are usable now via
+`--dist-url`; the drilled upgrade path gets listed once CI has proven it.
 
 ## Strategies
 
