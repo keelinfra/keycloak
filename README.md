@@ -73,7 +73,9 @@ Supported paths are listed in [UPGRADES.md](UPGRADES.md) and re-verified nightly
 
 ## Subscription
 
-The distribution is free and open source. A yearly subscription adds offline bundles, CVE tracking, upgrade runbooks, and direct access to the people who build it. $1,500 per node, per year — not per user. → https://keelinfra.io/pricing
+The distribution is free and open source. A yearly subscription adds offline bundles, [CVE tracking](CVE-POLICY.md), upgrade runbooks, and direct access to the people who build it. $1,500 per node, per year — not per user. → https://keelinfra.io/pricing
+
+CVE tracking means notification, impact analysis against your configuration, and help upgrading along a drilled path — **not** backported patches. [CVE-POLICY.md](CVE-POLICY.md) states the boundary, and works through what "20 CVEs" actually meant for two recent releases.
 
 ## License
 
