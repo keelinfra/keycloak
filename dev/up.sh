@@ -64,7 +64,7 @@ done
   echo "ssh_user: ubuntu"
   echo "domain: sso.dev.local"
   echo 'vip: ""'
-  echo 'keycloak_version: "26.6.0"'
+  echo 'keycloak_version: "26.7.3"'
   echo "tls_mode: selfsigned"
 } > .dev/cluster.yml
 

@@ -66,7 +66,7 @@ CI runs a clean install plus the session drill on every commit, and the upgrade 
 ## Upgrades
 
 ```bash
-./upgrade --to 26.7
+./upgrade --to 26.7.3
 ```
 
 Supported paths are listed in [UPGRADES.md](UPGRADES.md) and re-verified nightly in CI. We do not claim to support an upgrade path we have not run.
