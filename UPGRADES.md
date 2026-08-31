@@ -61,10 +61,7 @@ We build the tags ourselves and publish them as
 | From | To | Strategy | Sessions survive | Verified on | Notes |
 |---|---|---|---|---|---|
 | 26.2.5 | 26.2.16 ([kc-26.2.16-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.2.16-keel1)) | rolling | ✅ | 2026-08-28 | Single-node CI drill, runs nightly in the matrix: install the last community release, upgrade via `--dist-url`, pre-upgrade session refreshes, full session drill passes. The 3-node HA drill has **not** yet run for this path — Infinispan was upgraded within the 26.2 branch (15.0.16), so a multi-node rolling upgrade briefly mixes Infinispan versions; run the HA drill before relying on rolling there. |
-
-`26.6.4 → 26.6.6` is in the upgrade matrix but has not completed a run yet, so
-it is not listed above. The published tarballs are usable now via
-`--dist-url`; the drilled upgrade path gets listed once CI has proven it.
+| 26.6.4 | 26.6.6 ([kc-26.6.6-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.6-keel1)) | rolling | ✅ | 2026-08-31 | Single-node CI drill, runs nightly in the matrix: install the last community release (26.6.4), upgrade via `--dist-url`, pre-upgrade session refreshes, full session drill passes. The 3-node HA drill has **not** yet run for this path — Infinispan was upgraded within the 26.6 branch (16.0.8 → 16.0.14), so a multi-node rolling upgrade briefly mixes Infinispan versions; run the HA drill before relying on rolling there. |
 
 ## Strategies
 
