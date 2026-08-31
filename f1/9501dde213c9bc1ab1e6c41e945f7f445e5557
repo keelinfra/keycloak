@@ -1,0 +1,22 @@
+UPGRADES.md
+  s_7f1adbc2d0d553::t_61d3eb03a98949 18-21
+  s_7f1adbc2d0d553::t_de7b1271ab2d4f 3-6,10,13-14
+.github/workflows/upgrade-matrix.yml
+  s_7f1adbc2d0d553::t_d2fe7330e842c7 27-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "f19501dde213c9bc1ab1e6c41e945f7f445e5557",
+  "prompts": {},
+  "sessions": {
+    "s_7f1adbc2d0d553": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a20a60e4-0754-4f6e-a3f8-fc3350fea603",
+        "model": "claude-opus-5"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
