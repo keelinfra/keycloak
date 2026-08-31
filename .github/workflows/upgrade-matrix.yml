@@ -41,6 +41,13 @@ jobs:
             to: "26.2.16"
             strategy: rolling
             dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.2.16-keel1/keycloak-26.2.16.tar.gz"
+          # 26.6 became a second RHBK-only stream: community artifacts stop at
+          # 26.6.4, while 26.6.5 and 26.6.6 exist as tags only. 26.6.6 is the
+          # stream head and carries 12 CVE fixes over 26.6.4.
+          - from: "26.6.4"
+            to: "26.6.6"
+            strategy: rolling
+            dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.6.6-keel1/keycloak-26.6.6.tar.gz"
     steps:
       - uses: actions/checkout@v7
 
