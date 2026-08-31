@@ -103,7 +103,8 @@ only in the source tree.
 - **Two builds, one upgrade path.** 26.6.5 is published for anyone who needs
   that exact version, but the upgrade matrix only drills 26.6.4 → 26.6.6:
   26.6.6 contains everything in 26.6.5, so a path stopping at 26.6.5 would land
-  users short of the stream head with no benefit.
+  users short of the stream head with no benefit. That drill passed on its first
+  run (4m58s) and the path is now listed in UPGRADES.md.
 
 ## Remaining next steps
 
