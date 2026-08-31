@@ -9,8 +9,8 @@ working server. Executed 2026-08-27.
 
 Upstream cuts patch tags on maintenance branches for the Red Hat build of
 Keycloak but does not release them to the community (no announcement, no
-tarball, no image, no Maven artifacts — maintainer statement in
-[keycloak/keycloak#42779](https://github.com/keycloak/keycloak/discussions/42779)).
+tarball, no image, no Maven artifacts — maintainer statement in upstream
+discussion 42779).
 Verified empirically the same day:
 
 - Tags `26.2.0` … `26.2.16` exist on `keycloak/keycloak`.

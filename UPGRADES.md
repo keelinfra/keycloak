@@ -22,18 +22,22 @@ on a 3-node HA cluster — the Notes column says which.
 
 ## Do not land on 26.7.0–26.7.2
 
-[26.7.3](https://github.com/keycloak/keycloak/releases/tag/26.7.3) (2026-08-31)
-fixes 20 CVEs and six weaknesses, and repairs regressions introduced inside the
-26.7 stream itself:
+[Keycloak 26.7.3](https://www.keycloak.org/2026/08/keycloak-2673-released)
+(2026-08-31) fixes 20 CVEs and six weaknesses, and repairs regressions
+introduced inside the 26.7 stream itself.
 
-| Upstream | What breaks on 26.7.0–26.7.2 |
+Upstream issue numbers below are unlinked on purpose, so that quoting this table
+into a pull request or an issue does not post a reference onto the upstream
+tracker. Look them up on the Keycloak issue tracker if you need the detail.
+
+| Upstream issue | What breaks on 26.7.0–26.7.2 |
 |---|---|
-| [#51523](https://github.com/keycloak/keycloak/issues/51523) | Sustained high CPU on every node after upgrading |
-| [#51554](https://github.com/keycloak/keycloak/issues/51554) | Admin API per-request cost grows super-linearly with realm count (since 26.7.1) |
-| [#51707](https://github.com/keycloak/keycloak/issues/51707) | Lightweight access tokens resolve every role in every realm on each admin API request |
-| [#51920](https://github.com/keycloak/keycloak/issues/51920) | `OFFLINE_CLIENT_SESSION` write conflicts — "Record has changed since last read" |
-| [#52038](https://github.com/keycloak/keycloak/issues/52038) | Client session note removals are not persisted with persistent user sessions |
-| [#51792](https://github.com/keycloak/keycloak/issues/51792) | Aurora detection logs an ERROR into the PostgreSQL server log on every startup |
+| 51523 | Sustained high CPU on every node after upgrading |
+| 51554 | Admin API per-request cost grows super-linearly with realm count (since 26.7.1) |
+| 51707 | Lightweight access tokens resolve every role in every realm on each admin API request |
+| 51920 | `OFFLINE_CLIENT_SESSION` write conflicts — "Record has changed since last read" |
+| 52038 | Client session note removals are not persisted with persistent user sessions |
+| 51792 | Aurora detection logs an ERROR into the PostgreSQL server log on every startup |
 
 The 26.6.2 → 26.7.0 row above records a run we actually did, so it stays. It is
 not the version you should be running.
@@ -67,10 +71,10 @@ restored session carries the **same session id** (a refresh that quietly issues
 a new session is a failure, not a pass), and that its username, realm roles and
 scopes are unchanged.
 
-What it does **not** cover: client session notes. Upstream
-[#52038](https://github.com/keycloak/keycloak/issues/52038) — note removals not
-persisted with persistent user sessions — sits below the token surface the drill
-inspects, so a cluster can pass this drill and still have that bug. Reaching it
+What it does **not** cover: client session notes. Upstream issue 52038 — note
+removals not persisted with persistent user sessions — sits below the token
+surface the drill inspects, so a cluster can pass this drill and still have that
+bug. Reaching it
 needs a protocol mapper that projects a client session note into the token; that
 is not wired up yet.
 
