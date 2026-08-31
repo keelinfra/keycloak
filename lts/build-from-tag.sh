@@ -4,7 +4,7 @@
 # Why this exists: upstream cuts patch tags on maintenance branches (e.g.
 # 26.2.6..26.2.16) that carry backported fixes for the Red Hat build of
 # Keycloak, but publishes no community artifacts for them — no GitHub
-# release, no tarball, no container image (see upstream discussion 42779).
+# release, no tarball, no container image (see upstream discussion #42779).
 # Keycloak is Apache-2.0, so building and shipping those tags ourselves is
 # permitted; this script makes that build reproducible.
 #
