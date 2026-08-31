@@ -22,7 +22,7 @@ This repository is a distribution: the playbooks, roles, and defaults that deplo
 
 **Out of scope**
 
-- Vulnerabilities in upstream Keycloak, PostgreSQL, HAProxy, etc. — report those to the upstream project. When a fixed upstream CVE affects deployments made by this distribution, we ship the version bump and document any required operator action in [UPGRADES.md](UPGRADES.md).
+- Vulnerabilities in upstream Keycloak, PostgreSQL, HAProxy, etc. — report those to the upstream project. When a fixed upstream CVE affects deployments made by this distribution, we ship the version bump and document any required operator action in [UPGRADES.md](UPGRADES.md). How we triage upstream CVEs, and what we do and do not commit to doing about them, is in [CVE-POLICY.md](CVE-POLICY.md).
 
 ## Supported versions
 
