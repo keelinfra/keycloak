@@ -1,0 +1,24 @@
+CVE-POLICY.md
+  s_e7c3d701c012d2::t_0d3be922ff82e2 108-116
+  s_e7c3d701c012d2::t_c2bc34637ae787 106
+  s_e7c3d701c012d2::t_5acc68a76a590e 145,149-162
+  s_e7c3d701c012d2::t_8fed9a6d75c1d1 107
+UPGRADES.md
+  s_e7c3d701c012d2::t_248126d213a243 66-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "25d672f52cbec218c77bd46dd2999649e7324541",
+  "prompts": {},
+  "sessions": {
+    "s_e7c3d701c012d2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "06022fd1-a4a8-410b-addb-f0e9c9c51290",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "shenxianpeng <xianpeng.shen@gmail.com>"
+    }
+  }
+}
