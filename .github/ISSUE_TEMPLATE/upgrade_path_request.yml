@@ -1,0 +1,68 @@
+---
+name: Request an upgrade path
+description: Tell us the path you need. We drill it in public CI first, and list it only if it passes.
+title: "[upgrade path] "
+labels: [upgrade-path]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Every path in [UPGRADES.md](https://github.com/keelinfra/keycloak/blob/main/UPGRADES.md)
+        was executed end-to-end before it was listed: install the source version, log in,
+        upgrade, and assert the pre-upgrade session still refreshes. If yours is not there,
+        ask for it here. A passing drill goes into the nightly matrix and UPGRADES.md; a
+        failing one gets written up, with what broke. The single-node CI drill is free.
+        A 3-node HA drill, or a rehearsal against a copy of your own realm, is a service
+        engagement — say so below and we will tell you honestly whether you need one.
+  - type: input
+    id: from
+    attributes:
+      label: Version you are on
+      placeholder: "26.2.5"
+    validations:
+      required: true
+  - type: input
+    id: to
+    attributes:
+      label: Version you want to reach
+      description: A specific version, or "the nearest one with the CVE fixes" if you are not sure.
+      placeholder: "26.6.6"
+    validations:
+      required: true
+  - type: dropdown
+    id: topology
+    attributes:
+      label: Cluster shape
+      options:
+        - single node
+        - 3-node HA
+        - other (describe below)
+    validations:
+      required: true
+  - type: dropdown
+    id: why
+    attributes:
+      label: What is driving the upgrade
+      options:
+        - a CVE with a deadline
+        - stuck on a stream with no community artifacts (26.2, 26.4, 26.6)
+        - a planned maintenance window
+        - leaving RH-SSO or a managed vendor for self-hosted
+        - other (describe below)
+    validations:
+      required: true
+  - type: textarea
+    id: nontrivial
+    attributes:
+      label: What would make a naive upgrade break
+      description: >-
+        Custom providers or extensions, custom authentication flows or themes, user federation
+        (LDAP, AD, Kerberos), SAML or OIDC brokering, a database other than PostgreSQL — anything
+        the drill should exercise. Redact hostnames and secrets.
+      placeholder: "LDAP federation against AD, one custom authenticator SPI, custom login theme"
+  - type: checkboxes
+    id: publish
+    attributes:
+      label: Publishing
+      options:
+        - label: You may list this path in UPGRADES.md and write about what the drill found. Nothing above identifies you or your organisation; we keep it that way.
