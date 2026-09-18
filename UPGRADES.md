@@ -13,6 +13,12 @@ install the source version, log in, upgrade, and assert the pre-upgrade session
 still refreshes on the target version. Some paths have additionally been drilled
 on a 3-node HA cluster — the Notes column says which.
 
+**Don't see your path?**
+[Request it](https://github.com/keelinfra/keycloak/issues/new?template=upgrade_path_request.yml).
+We drill it in CI first, and list it only if it passes; if it fails, we publish
+what broke. Paths *off* a stream with no community artifacts — 26.2 in
+particular — are the ones we most want to hear about.
+
 | From | To | Strategy | Sessions survive | Verified on | Notes |
 |---|---|---|---|---|---|
 | 26.6.0 | 26.6.2 | rolling | ✅ | 2026-08-25 | **3-node HA drilled.** 156/156 probes OK during upgrade — zero downtime ([probe log](https://keelinfra.io/blog/zero-downtime-keycloak-upgrades/)) |
