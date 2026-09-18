@@ -1,0 +1,23 @@
+UPGRADES.md
+  s_e7c3d701c012d2::t_8192599f31935d 16-21
+README.md
+  s_e7c3d701c012d2::t_af32960ae5610d 72
+.github/ISSUE_TEMPLATE/upgrade_path_request.yml
+  s_e7c3d701c012d2::t_fe8bc58a705a19 1-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fe4b6057a9623318f68756c064745c59867491c5",
+  "prompts": {},
+  "sessions": {
+    "s_e7c3d701c012d2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "06022fd1-a4a8-410b-addb-f0e9c9c51290",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Xianpeng Shen <xianpeng.shen@gmail.com>"
+    }
+  }
+}
