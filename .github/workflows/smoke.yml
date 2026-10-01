@@ -32,7 +32,7 @@ jobs:
           ssh_user: runner
           domain: sso.ci.local
           vip: ""
-          keycloak_version: "26.7.3"
+          keycloak_version: "26.8.0"
           tls_mode: selfsigned
           CFG
 
