@@ -23,25 +23,11 @@ particular — are the ones we most want to hear about.
 |---|---|---|---|---|---|
 | 26.6.0 | 26.6.2 | rolling | ✅ | 2026-08-25 | **3-node HA drilled.** 156/156 probes OK during upgrade — zero downtime ([probe log](https://keelinfra.io/blog/zero-downtime-keycloak-upgrades/)) |
 | 26.6.2 | 26.7.0 | stop-start | ✅ | 2026-08-25 | **3-node HA drilled.** ~16s service window measured (staged artifacts, stop → cut over → start); sessions persisted in PostgreSQL across the restart. **Do not stop here** — see "Do not land on 26.7.0–26.7.2" below |
-| 26.6.2 | 26.7.3 | stop-start | ✅ | 2026-08-31 | **Single-node CI only** — the 3-node HA drill has not run against this target yet. Same stop-start path as the 26.7.0 row above, which was HA drilled |
-| 26.7.0 | 26.7.3 | rolling | ✅ | 2026-08-31 | **Single-node CI only** — the 3-node HA drill has not run yet. This is the way off 26.7.0–26.7.2 |
-
-## Pending verification
-
-These paths are in the [upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml)
-but have not yet completed a run. **They are not supported paths.** They move
-into the table above, with a date, once CI proves them — not before. The two
-26.7.5 targets replace the 26.7.3 rows above when they pass: 26.7.3 is no longer
-the version to land on (see below).
-
-| From | To | Strategy | Status |
-|---|---|---|---|
-| 26.6.2 | 26.7.5 | stop-start | first CI run pending |
-| 26.7.0 | 26.7.5 | rolling | first CI run pending |
-| 26.7.3 | 26.7.5 | rolling | first CI run pending |
-| 26.7.3 | 26.8.0 | stop-start | first CI run pending |
-| 26.7.5 | 26.8.0 | stop-start | first CI run pending |
-| 26.6.6 ([kc-26.6.6-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.6-keel1)) | 26.7.5 | stop-start | first CI run pending |
+| 26.6.2 | 26.7.5 | stop-start | ✅ | 2026-10-01 | **Single-node CI only** — the 3-node HA drill has not run against this target yet. Same stop-start path as the 26.7.0 row above, which was HA drilled. Listed with target 26.7.3 from 2026-08-31 until 26.7.5 shipped |
+| 26.7.0 | 26.7.5 | rolling | ✅ | 2026-10-01 | **Single-node CI only** — the 3-node HA drill has not run yet. This is the way off 26.7.0–26.7.2. Listed with target 26.7.3 from 2026-08-31 until 26.7.5 shipped |
+| 26.7.3 | 26.7.5 | rolling | ✅ | 2026-10-01 | **Single-node CI only.** The patch path for installs made with this distribution's 26.7.3 default |
+| 26.7.3 | 26.8.0 | stop-start | ✅ | 2026-10-01 | **Single-node CI only.** Minor upgrade — see "26.8.0 on a cluster built with this distribution" below for what the migration touches |
+| 26.7.5 | 26.8.0 | stop-start | ✅ | 2026-10-01 | **Single-node CI only.** Same migration as the row above |
 
 ## Do not land on 26.7.0–26.7.2
 
@@ -124,6 +110,7 @@ We build the tags ourselves and publish them as
 |---|---|---|---|---|---|
 | 26.2.5 | 26.2.16 ([kc-26.2.16-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.2.16-keel1)) | rolling | ✅ | 2026-08-28 | Single-node CI drill, runs nightly in the matrix: install the last community release, upgrade via `--dist-url`, pre-upgrade session refreshes, full session drill passes. The 3-node HA drill has **not** yet run for this path — Infinispan was upgraded within the 26.2 branch (15.0.16), so a multi-node rolling upgrade briefly mixes Infinispan versions; run the HA drill before relying on rolling there. |
 | 26.6.4 | 26.6.6 ([kc-26.6.6-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.6-keel1)) | rolling | ✅ | 2026-08-31 | Single-node CI drill, runs nightly in the matrix: install the last community release (26.6.4), upgrade via `--dist-url`, pre-upgrade session refreshes, full session drill passes. The 3-node HA drill has **not** yet run for this path — Infinispan was upgraded within the 26.6 branch (16.0.8 → 16.0.14), so a multi-node rolling upgrade briefly mixes Infinispan versions; run the HA drill before relying on rolling there. |
+| 26.6.6 ([kc-26.6.6-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.6-keel1)) | 26.7.5 | stop-start | ✅ | 2026-10-01 | Single-node CI drill, runs nightly in the matrix: install the LTS build via `keycloak_dist_url`, upgrade to the last community 26.7 release, pre-upgrade session refreshes, full session drill passes. This is the way off the 26.6 stream; 26.7.5 → 26.8.0 in the table above is the next hop. The 3-node HA drill has **not** yet run for this path. |
 
 ### 26.2: the branch head still has a critical unpatched CVE
 
