@@ -29,6 +29,17 @@ particular — are the ones we most want to hear about.
 | 26.7.3 | 26.8.0 | stop-start | ✅ | 2026-10-01 | **Single-node CI only.** Minor upgrade — see "26.8.0 on a cluster built with this distribution" below for what the migration touches |
 | 26.7.5 | 26.8.0 | stop-start | ✅ | 2026-10-01 | **Single-node CI only.** Same migration as the row above |
 
+## Pending verification
+
+These paths are in the [upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml)
+but have not yet completed a run. **They are not supported paths.** They move
+into the LTS table below, with a date, once CI proves them — not before.
+
+| From | To | Strategy | Status |
+|---|---|---|---|
+| 26.6.6 ([kc-26.6.6-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.6-keel1)) | 26.6.7 ([kc-26.6.7-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.7-keel1)) | rolling | first CI run pending |
+| 26.6.7 ([kc-26.6.7-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.7-keel1)) | 26.7.5 | stop-start | first CI run pending |
+
 ## Do not land on 26.7.0–26.7.2
 
 [26.7.3](https://github.com/keycloak/keycloak/releases/tag/26.7.3) (2026-08-31)
@@ -92,15 +103,16 @@ streams are in that state today, and 26.7 joins them with its first tag after
 | Stream | Community artifacts stop at | Tags continue to | Built and published |
 |---|---|---|---|
 | 26.2 | 26.2.5 | 26.2.16 | `kc-26.2.16-keel1` |
-| 26.6 | 26.6.4 | 26.6.7 | `kc-26.6.5-keel1`, `kc-26.6.6-keel1` — 26.6.7 (tagged 2026-09-07) not built yet |
+| 26.6 | 26.6.4 | 26.6.7 | `kc-26.6.5-keel1`, `kc-26.6.6-keel1`, `kc-26.6.7-keel1` |
 
 The 26.6 stream matters more than its size suggests: 26.6.4 → 26.6.6 carries
 **12 CVE fixes** in 69 commits, and a cluster left on 26.6.4 has no upstream
 route to any of them. Details and build evidence:
 [VERIFICATION-26.6.6.md](https://github.com/keelinfra/keycloak/blob/main/lts/VERIFICATION-26.6.6.md).
 26.6.7, tagged 2026-09-07, backports September security fixes from the batch
-the community got as 26.7.4. It is not built or sorted here yet; when it is, it
-goes through the same `lts-release` workflow and lands as `kc-26.6.7-keel1`.
+the community got as 26.7.4. It is built and published as
+[kc-26.6.7-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.7-keel1) (2026-10-01);
+its CVEs are not sorted in [CVE-POLICY.md](CVE-POLICY.md) yet.
 
 We build the tags ourselves and publish them as
 [`kc-<version>-keel<rev>` releases](https://github.com/keelinfra/keycloak/releases)

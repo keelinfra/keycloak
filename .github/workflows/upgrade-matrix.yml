@@ -53,19 +53,30 @@ jobs:
             strategy: rolling
             dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.2.16-keel1/keycloak-26.2.16.tar.gz"
           # 26.6 became a second RHBK-only stream: community artifacts stop at
-          # 26.6.4, while 26.6.5, 26.6.6 and 26.6.7 exist as tags only. 26.6.6
-          # is the last tag built here and carries 12 CVE fixes over 26.6.4.
+          # 26.6.4, while 26.6.5, 26.6.6 and 26.6.7 exist as tags only; all
+          # three are built here. 26.6.6 carries 12 CVE fixes over 26.6.4.
           - from: "26.6.4"
             to: "26.6.6"
             strategy: rolling
             dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.6.6-keel1/keycloak-26.6.6.tar.gz"
-          # The way off the 26.6 LTS build: start on kc-26.6.6-keel1 (no
-          # upstream artifact, hence from_dist_url) and move to the last
+          # 26.6.7 (tagged 2026-09-07, built as kc-26.6.7-keel1 on 2026-10-01)
+          # is the branch head: the rolling hop from the previous build.
+          - from: "26.6.6"
+            to: "26.6.7"
+            strategy: rolling
+            from_dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.6.6-keel1/keycloak-26.6.6.tar.gz"
+            dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.6.7-keel1/keycloak-26.6.7.tar.gz"
+          # The way off the 26.6 LTS builds: start on a kc-26.6.*-keel1 build
+          # (no upstream artifact, hence from_dist_url) and move to the last
           # community 26.7 release. 26.8.0 is the next hop from there.
           - from: "26.6.6"
             to: "26.7.5"
             strategy: stop-start
             from_dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.6.6-keel1/keycloak-26.6.6.tar.gz"
+          - from: "26.6.7"
+            to: "26.7.5"
+            strategy: stop-start
+            from_dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.6.7-keel1/keycloak-26.6.7.tar.gz"
     steps:
       - uses: actions/checkout@v7
 
