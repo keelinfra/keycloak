@@ -108,7 +108,10 @@ only in the source tree.
 
 ## Remaining next steps
 
-- The 3-node HA drill for 26.6.4 → 26.6.6, which CI cannot cover.
+- ~~The 3-node HA drill for 26.6.4 → 26.6.6, which CI cannot cover.~~
+  Done 2026-10-02: CI now drills this path nightly on a 3-node container
+  rig. The first run ([run](https://github.com/keelinfra/keycloak/actions/runs/37063697313)) answered 441/441
+  probes across three load balancers during the rolling upgrade.
 - Tag→CVE mapping against RHBK errata for release notes — now more valuable
   than it was on 26.2, since this stream has 12 CVEs in two tags.
 - Artifact naming/branding decision (Apache-2.0 grants no trademark rights to

@@ -11,6 +11,7 @@
 
 [![smoke](https://github.com/keelinfra/keycloak/actions/workflows/smoke.yml/badge.svg)](https://github.com/keelinfra/keycloak/actions/workflows/smoke.yml)
 [![upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml/badge.svg)](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml)
+[![HA matrix](https://github.com/keelinfra/keycloak/actions/workflows/ha-matrix.yml/badge.svg)](https://github.com/keelinfra/keycloak/actions/workflows/ha-matrix.yml)
 
 **Production-ready, self-hosted Keycloak distribution.** HA, backups, monitoring, and tested upgrade paths — on your own infrastructure, in one command.
 
@@ -29,7 +30,7 @@ keelinfra is the third option: a distribution you run yourself, with a subscript
 - **Backups & PITR** — pgBackRest, scheduled, restore-tested
 - **Observability** — Prometheus, Grafana dashboards, alert rules for the things that actually page you
 - **Config as code** — realms, clients, and roles managed via keycloak-config-cli
-- **Tested upgrade paths** — every supported path runs nightly in the [upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml): install, log in, upgrade, and the pre-upgrade session must survive
+- **Tested upgrade paths** — every supported path runs nightly, single-node in the [upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml) and on a 3-node cluster under load-balancer probes in the [HA matrix](https://github.com/keelinfra/keycloak/actions/workflows/ha-matrix.yml): install, log in, upgrade, and the pre-upgrade session must survive
 
 ## Quick start
 
@@ -61,7 +62,7 @@ Every claim above is a drill you can run against your own cluster:
 ./verify --drill session     # rolling-restart every node; logins must survive
 ```
 
-CI runs a clean install plus the session drill on every commit, and the upgrade matrix re-proves every supported upgrade path nightly.
+CI runs a clean single-node install with the session and restore drills on every commit, installs a 3-node cluster and runs every drill on it whenever the roles change, and re-proves every supported upgrade path nightly — single-node, and on three nodes under load-balancer probes.
 
 ## Upgrades
 
