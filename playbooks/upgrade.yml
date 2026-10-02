@@ -139,7 +139,7 @@
         # rise 2 / inter 3s: the balancer needs two passing checks before it
         # routes here again. Draining the next node before that would leave
         # the cluster one node short, with serial: 1 on a 3-node cluster.
-        - name: Wait until every load balancer reports UP for {{ inventory_hostname }}
+        - name: Wait until every load balancer reports this node UP
           ansible.builtin.command:
             cmd: sh -c 'echo "show stat" | socat stdio /run/haproxy/admin.sock'
           delegate_to: "{{ item }}"
