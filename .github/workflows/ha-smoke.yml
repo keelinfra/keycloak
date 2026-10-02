@@ -64,8 +64,8 @@ jobs:
       - name: Health checks
         run: dev/ha-exec.sh ./verify
 
-      - name: Session survives a rolling restart
-        run: dev/ha-exec.sh ./verify --drill session
+      - name: Drills — failover, restore, session across a rolling restart
+        run: dev/ha-exec.sh ./verify --drill all
 
       - name: Resource use
         if: always()

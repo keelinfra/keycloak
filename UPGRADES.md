@@ -135,6 +135,30 @@ not drilled yet. Impact analysis and interim mitigation:
   return on the new version. Sessions are persisted in PostgreSQL and survive the
   restart; users are not logged out. Expect a short (~1–2 min) service window.
 
+## Recovering a half-finished upgrade
+
+`./upgrade` refuses to start while the nodes disagree on the version they
+run (`readlink /opt/keycloak/current` on each node shows which). That is
+what an interrupted rolling upgrade leaves behind once the first node has
+moved, and what a stop-start upgrade leaves when only some nodes were
+restarted.
+
+- **Same minor version** (a rolling upgrade; both releases share the
+  database schema): on each node that has moved, point
+  `/opt/keycloak/current` back at the previous release
+  (`ln -sfn /opt/keycloak/keycloak-<old> /opt/keycloak/current`), restart
+  `keycloak`, wait for `https://<node>:9000/health/ready`, then run
+  `./upgrade --to <target>` again from the start.
+- **Different minor version** (stop-start): once the first node has started
+  on the new release the schema is migrated and the old release will not
+  start against it. Finish going forward: on each remaining node point the
+  symlink at the new release, `systemctl restart keycloak`, wait for
+  readiness. A final `./upgrade --to <target>` is then a no-op that confirms
+  every node reports the target.
+
+Afterwards update `keycloak_version` in your cluster definition, as after
+any upgrade.
+
 ## What the session drill proves
 
 `./verify --drill session` opens an online session and an offline session,

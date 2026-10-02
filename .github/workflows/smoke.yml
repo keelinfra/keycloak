@@ -51,6 +51,9 @@ jobs:
       - name: Session survives restart
         run: ./verify --drill session
 
+      - name: Restore drill
+        run: ./verify --drill restore
+
       - name: Dump service logs on failure
         if: failure()
         run: |
