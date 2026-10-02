@@ -1,0 +1,138 @@
+---
+name: ha-matrix
+# Every upgrade path in .github/upgrade-paths.yml, drilled on the 3-node
+# container rig (dev/containers, dev/ha-drill.sh): install FROM on three
+# nodes, log in, probe every node's load balancer once a second while
+# ./upgrade runs, assert all three nodes run TO and every balancer sees every
+# node UP, refresh the pre-upgrade session, then the failover, restore and
+# session drills. Nightly for every row; the pr_smoke rows on pull requests;
+# one chosen path on dispatch. Each row's receipt (probe tallies, tarball
+# checksums, phase timings) is its job summary; journals and probe logs are
+# the artifact. Tarballs are cached per version so a release is downloaded
+# once, not once per run per node.
+on:
+  schedule:
+    - cron: "47 1 * * *"
+  workflow_dispatch:
+    inputs:
+      from:
+        description: "FROM version — with `to`, drill only this path"
+        required: false
+        default: ""
+      to:
+        description: "TO version"
+        required: false
+        default: ""
+      strategy:
+        description: "rolling or stop-start (required with from/to)"
+        required: false
+        default: ""
+      from_dist_url:
+        description: "tarball URL for FROM (optional)"
+        required: false
+        default: ""
+      dist_url:
+        description: "tarball URL for TO (optional)"
+        required: false
+        default: ""
+  pull_request:
+    paths:
+      - roles/**
+      - playbooks/**
+      - dev/containers/**
+      - dev/ha-*.sh
+      - dev/probe.sh
+      - .github/upgrade-paths.yml
+      - .github/scripts/upgrade_paths.py
+      - .github/workflows/ha-matrix.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ha-matrix-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  paths:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.rows.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: rows
+        env:
+          ONLY_FROM: ${{ inputs.from }}
+          ONLY_TO: ${{ inputs.to }}
+          ONLY_STRATEGY: ${{ inputs.strategy }}
+          ONLY_FROM_DIST_URL: ${{ inputs.from_dist_url }}
+          ONLY_DIST_URL: ${{ inputs.dist_url }}
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || python3 -m pip install --quiet --break-system-packages pyyaml
+          args=()
+          [[ "$GITHUB_EVENT_NAME" == pull_request ]] && args=(--pr-smoke)
+          [[ -n "$ONLY_FROM" && -n "$ONLY_TO" ]] && args=(--only "$ONLY_FROM" "$ONLY_TO" "$ONLY_STRATEGY" "$ONLY_FROM_DIST_URL" "$ONLY_DIST_URL")
+          python3 .github/scripts/upgrade_paths.py "${args[@]}" | tee -a "$GITHUB_OUTPUT"
+
+  ha:
+    needs: paths
+    name: "${{ matrix.from }} → ${{ matrix.to }} (${{ matrix.strategy }})"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.paths.outputs.matrix) }}
+    env:
+      FROM_URL: ${{ matrix.from_dist_url || format('https://github.com/keycloak/keycloak/releases/download/{0}/keycloak-{0}.tar.gz', matrix.from) }}
+      TO_URL: ${{ matrix.dist_url || format('https://github.com/keycloak/keycloak/releases/download/{0}/keycloak-{0}.tar.gz', matrix.to) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+      - uses: crazy-max/ghaction-github-runtime@v4
+
+      - name: Build rig images
+        working-directory: dev/containers
+        run: |
+          docker buildx bake -f compose.yml --load --allow "fs.read=$(cd ../.. && pwd)" \
+            --set '*.cache-from=type=gha' --set '*.cache-to=type=gha,mode=max'
+
+      # One cache entry per (version, tarball URL): a release is fetched from
+      # GitHub once, then served to the nodes from the control container.
+      - id: keys
+        run: |
+          echo "from=$(printf '%s' "$FROM_URL" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          echo "to=$(printf '%s' "$TO_URL" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: .dev/dist-cache/${{ matrix.from }}
+          key: kc-dist-${{ matrix.from }}-${{ steps.keys.outputs.from }}
+      - uses: actions/cache@v6
+        with:
+          path: .dev/dist-cache/${{ matrix.to }}
+          key: kc-dist-${{ matrix.to }}-${{ steps.keys.outputs.to }}
+
+      - name: Drill ${{ matrix.from }} → ${{ matrix.to }} on three nodes
+        run: |
+          HA_SKIP_BUILD=1 dev/ha-drill.sh --from "${{ matrix.from }}" --to "${{ matrix.to }}" \
+            --strategy "${{ matrix.strategy }}" --from-dist-url "$FROM_URL" --dist-url "$TO_URL"
+
+      - name: Receipt
+        if: always()
+        run: cat .dev/containers/receipt.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "no receipt written" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect node logs
+        if: always()
+        run: dev/ha-logs.sh .dev/containers/artifacts
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ha-${{ matrix.from }}-${{ matrix.to }}
+          path: .dev/containers/artifacts
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: dev/ha-down.sh

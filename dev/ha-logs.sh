@@ -32,6 +32,9 @@ for node in "${HA_NODES[@]}"; do
   ha_node "$node" system.txt sh -c 'cat /etc/hosts; echo; free -m; echo; df -h /; echo; nproc'
   echo "$node: collected"
 done
+for f in "$HA_STATE_DIR"/probe-*.log "$HA_STATE_DIR"/receipt.md; do
+  [[ -e "$f" ]] && cp "$f" "$OUT/"
+done
 docker stats --no-stream > "$OUT/docker-stats.txt" 2>&1 || true
 ha_compose ps > "$OUT/compose-ps.txt" 2>&1 || true
 echo "→ $OUT"
