@@ -11,3 +11,11 @@ common_sysctl:
   vm.swappiness: 10
   net.core.somaxconn: 4096
   net.ipv4.tcp_max_syn_backlog: 4096
+
+# True when the node is a container — the dev/containers test rig. The role
+# then leaves hostname, kernel parameters and time sync to the container
+# host and writes /etc/hosts in place (Docker bind-mounts it). Always false
+# on VMs and bare metal; not meant to be set by hand.
+keelinfra_container_mode: >-
+  {{ ((ansible_virtualization_tech_guest | default([])) + [ansible_virtualization_type | default('')])
+     | intersect(['docker', 'podman', 'containerd', 'container', 'lxc']) | length > 0 }}

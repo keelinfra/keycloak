@@ -8,7 +8,7 @@ on:
 jobs:
   # Single-node install on the runner itself: proves every role deploys on a
   # clean Ubuntu 24.04 with real systemd, and that a login session survives a
-  # restart. The full 3-node HA matrix runs locally (and in CI from M2 on).
+  # restart. The 3-node variant runs in ha-smoke.yml on the container rig.
   single-node:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

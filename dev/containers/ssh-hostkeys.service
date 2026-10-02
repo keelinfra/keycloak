@@ -1,0 +1,9 @@
+[Unit]
+Description=Generate ssh host keys on first boot (container rig)
+ConditionPathExists=!/etc/ssh/ssh_host_ed25519_key
+Before=ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ssh-keygen -A
+RemainAfterExit=yes

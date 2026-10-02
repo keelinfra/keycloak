@@ -1,0 +1,99 @@
+---
+# 3-node Keycloak HA test rig: three privileged Ubuntu 24.04 systemd
+# containers standing in for VMs, plus a control container that runs
+# Ansible against them over ssh. Start it with dev/ha-up.sh; the whole
+# story is in README.md next to this file.
+#
+# HA_PREFIX       first three octets of the rig subnet (default 172.28.0)
+# HA_CGROUP_MODE  private (default) or host, if your Docker needs the latter
+name: kc-ha
+
+x-node: &node
+  image: kc-ha-node:local
+  privileged: true
+  cgroup: ${HA_CGROUP_MODE:-private}
+  stop_signal: SIGRTMIN+3
+  stop_grace_period: 30s
+  tmpfs:
+    - /run
+    - /run/lock
+  # PostgreSQL's dynamic shared memory lives in /dev/shm; Docker's 64 MB
+  # default is too small.
+  shm_size: 1gb
+  # roles/common skips sysctl in container mode (vm.* is not namespaced);
+  # these two are, and mirror common_sysctl.
+  sysctls:
+    net.core.somaxconn: 4096
+    net.ipv4.tcp_max_syn_backlog: 4096
+  # Fixed entries survive a container restart; the block roles/common writes
+  # into /etc/hosts does not (Docker regenerates the file).
+  extra_hosts:
+    - "kc-node1:${HA_PREFIX:-172.28.0}.11"
+    - "kc-node2:${HA_PREFIX:-172.28.0}.12"
+    - "kc-node3:${HA_PREFIX:-172.28.0}.13"
+  healthcheck:
+    test: ["CMD", "systemctl", "is-active", "--quiet", "ssh"]
+    interval: 5s
+    timeout: 5s
+    retries: 24
+    start_period: 10s
+
+services:
+  kc-node1:
+    <<: *node
+    build:
+      context: ../..
+      dockerfile: dev/containers/Dockerfile
+      target: node
+    container_name: kc-node1
+    hostname: kc-node1
+    networks:
+      kc-ha:
+        ipv4_address: ${HA_PREFIX:-172.28.0}.11
+
+  kc-node2:
+    <<: *node
+    container_name: kc-node2
+    hostname: kc-node2
+    networks:
+      kc-ha:
+        ipv4_address: ${HA_PREFIX:-172.28.0}.12
+
+  kc-node3:
+    <<: *node
+    container_name: kc-node3
+    hostname: kc-node3
+    networks:
+      kc-ha:
+        ipv4_address: ${HA_PREFIX:-172.28.0}.13
+
+  control:
+    image: kc-ha-control:local
+    build:
+      context: ../..
+      dockerfile: dev/containers/Dockerfile
+      target: control
+    container_name: kc-ha-control
+    hostname: control
+    init: true
+    working_dir: /work
+    volumes:
+      - ../..:/work
+      - ../../.dev/dist-cache:/dist
+    networks:
+      kc-ha:
+        ipv4_address: ${HA_PREFIX:-172.28.0}.2
+    depends_on:
+      kc-node1:
+        condition: service_healthy
+      kc-node2:
+        condition: service_healthy
+      kc-node3:
+        condition: service_healthy
+
+networks:
+  kc-ha:
+    name: kc-ha
+    ipam:
+      config:
+        - subnet: ${HA_PREFIX:-172.28.0}.0/24

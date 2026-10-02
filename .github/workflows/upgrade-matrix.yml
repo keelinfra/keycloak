@@ -3,7 +3,8 @@ name: upgrade matrix
 # Executes every upgrade path listed in UPGRADES.md, end-to-end, on a clean
 # single-node install: install the FROM version, log in, run ./upgrade, then
 # prove the pre-upgrade session still refreshes on the TO version.
-# The 3-node HA variant of each path runs locally before a path is listed.
+# This is the single-node run of each path; whether a path has also been
+# drilled on 3 nodes is recorded per row in UPGRADES.md.
 on:
   schedule:
     - cron: "17 3 * * *"
