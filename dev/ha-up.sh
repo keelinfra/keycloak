@@ -21,6 +21,7 @@ while [[ $# -gt 0 ]]; do
 done
 [[ "$VERSION" =~ ^26\.[0-9]+\.[0-9]+$ ]] || { echo "error: --version must look like 26.x.y" >&2; exit 1; }
 ha_require_docker
+command -v ssh-keygen >/dev/null || { echo "error: ssh-keygen not found (install the OpenSSH client)" >&2; exit 1; }
 
 # inventory/ is rendered for one cluster at a time. Do not overwrite one that
 # belongs to a Multipass (dev/up.sh) or real cluster.

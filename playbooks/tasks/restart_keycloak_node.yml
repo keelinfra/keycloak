@@ -1,0 +1,20 @@
+---
+# Restart Keycloak on one node and wait until it serves /health/ready again
+# before the caller moves on to the next one. Used by the session drill, so
+# its rolling restart is a real one: the other nodes keep serving throughout,
+# as during a rolling upgrade.
+- name: Restart keycloak on {{ kc_node }}
+  ansible.builtin.systemd:
+    name: keycloak
+    state: restarted
+  delegate_to: "{{ kc_node }}"
+
+- name: Wait until keycloak is ready again on {{ kc_node }}
+  ansible.builtin.uri:
+    url: "https://{{ hostvars[kc_node].ansible_host }}:{{ keycloak_mgmt_port }}/health/ready"
+    validate_certs: false
+    status_code: 200
+  register: kc_node_ready
+  until: kc_node_ready.status == 200
+  retries: 60
+  delay: 5

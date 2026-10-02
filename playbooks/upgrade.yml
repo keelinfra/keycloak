@@ -23,6 +23,16 @@
         kc_from: "{{ current_link.stat.lnk_target | basename | regex_replace('^keycloak-', '') }}"
         kc_to: "{{ keycloak_target_version }}"
 
+    - name: Every node must run the same version before an upgrade starts
+      ansible.builtin.assert:
+        that: groups['keycloak'] | map('extract', hostvars, 'kc_from') | unique | length == 1
+        fail_msg: >-
+          The nodes disagree on the version they run:
+          {{ dict(groups['keycloak'] | zip(groups['keycloak'] | map('extract', hostvars, 'kc_from'))) }}.
+          A previous upgrade did not finish. Bring every node to the same version
+          first — see "Recovering a half-finished upgrade" in UPGRADES.md.
+      run_once: true
+
     - name: Classify upgrade
       ansible.builtin.set_fact:
         upgrade_kind: >-
@@ -125,6 +135,23 @@
           delegate_to: "{{ item }}"
           loop: "{{ groups['haproxy'] }}"
           changed_when: true
+
+        # rise 2 / inter 3s: the balancer needs two passing checks before it
+        # routes here again. Draining the next node before that would leave
+        # the cluster one node short, with serial: 1 on a 3-node cluster.
+        - name: Wait until every load balancer reports UP for {{ inventory_hostname }}
+          ansible.builtin.command:
+            cmd: sh -c 'echo "show stat" | socat stdio /run/haproxy/admin.sock'
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['haproxy'] }}"
+          register: lb_stat
+          changed_when: false
+          until: >-
+            lb_stat.stdout_lines
+            | select('match', '^keycloak_https,' ~ inventory_hostname ~ ',')
+            | map('split', ',') | map(attribute=17) | first | default('') == 'UP'
+          retries: 20
+          delay: 3
 
 # ------------------------------------------------------------- stop-start ----
 - name: Stop-start minor upgrade

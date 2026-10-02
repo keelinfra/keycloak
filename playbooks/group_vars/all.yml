@@ -9,6 +9,7 @@ postgres_bin_dir: "/usr/lib/postgresql/{{ postgres_version }}/bin"
 keycloak_db_name: keycloak
 keycloak_db_user: keycloak
 haproxy_pg_port: 5433
+haproxy_https_port: 443
 keycloak_https_port: 8443
 keycloak_mgmt_port: 9000
 tls_dir: /etc/keelinfra/tls

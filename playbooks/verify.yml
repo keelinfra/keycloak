@@ -67,22 +67,46 @@
           register: cluster_state
           changed_when: false
 
-        - name: Pick leader and a healthy replica
+        - name: Pick the leader and the streaming replicas
           ansible.builtin.set_fact:
             current_leader: >-
               {{ (cluster_state.stdout | from_json)
                  | selectattr('Role', 'equalto', 'Leader')
                  | map(attribute='Member') | first }}
-            switch_target: >-
+            streaming_replicas: >-
               {{ (cluster_state.stdout | from_json)
                  | selectattr('Role', 'equalto', 'Replica')
                  | selectattr('State', 'equalto', 'streaming')
-                 | map(attribute='Member') | first }}
+                 | map(attribute='Member') | list }}
+
+        - name: A switchover needs a streaming replica to switch to
+          ansible.builtin.assert:
+            that: streaming_replicas | length > 0
+            fail_msg: >-
+              No replica is streaming from {{ current_leader }}. The failover drill
+              needs at least two Patroni members; it cannot run on a single node.
+              Cluster state: {{ cluster_state.stdout }}
+
+        - name: Choose the switchover target
+          ansible.builtin.set_fact:
+            switch_target: "{{ streaming_replicas | first }}"
 
         - name: Switch the PostgreSQL leader over to a replica
           ansible.builtin.command:
             cmd: patronictl -c /etc/patroni/config.yml switchover --leader {{ current_leader }} --candidate {{ switch_target }} --force
           changed_when: true
+
+        - name: Confirm the leader moved to the switchover target
+          ansible.builtin.command:
+            cmd: patronictl -c /etc/patroni/config.yml list -f json
+          register: cluster_after
+          changed_when: false
+          until: >-
+            (cluster_after.stdout | from_json)
+            | selectattr('Role', 'equalto', 'Leader')
+            | map(attribute='Member') | list == [switch_target]
+          retries: 20
+          delay: 3
 
         - name: Write through haproxy after switchover
           become: true
@@ -116,6 +140,14 @@
             path: /var/tmp/keelinfra-restore-drill
             state: absent
 
+        - name: Recreate the scratch restore directory
+          ansible.builtin.file:
+            path: /var/tmp/keelinfra-restore-drill
+            state: directory
+            owner: postgres
+            group: postgres
+            mode: "0700"
+
         - name: Restore latest backup to scratch directory
           become: true
           become_user: postgres
@@ -146,7 +178,9 @@
   hosts: primary
   gather_facts: false
   vars:
-    kc_token_url: "https://127.0.0.1:{{ keycloak_https_port }}/realms/demo/protocol/openid-connect/token"
+    # Through this node's HAProxy, the way clients reach the cluster — so the
+    # drill also proves the load balancer keeps serving across the restarts.
+    kc_token_url: "https://127.0.0.1:{{ haproxy_https_port }}/realms/demo/protocol/openid-connect/token"
   tasks:
     - name: Run session drill
       when: drill | default('health') in ['session', 'all']
@@ -191,23 +225,11 @@
                   ~ ('=' * ((4 - (login.json.access_token.split('.')[1] | length) % 4) % 4)))
                  | b64decode | from_json }}
 
-        - name: Rolling restart of every Keycloak node
-          ansible.builtin.systemd:
-            name: keycloak
-            state: restarted
-          delegate_to: "{{ item }}"
+        - name: Restart every Keycloak node in turn, each back to ready before the next
+          ansible.builtin.include_tasks: tasks/restart_keycloak_node.yml
           loop: "{{ groups['keycloak'] }}"
-
-        - name: Wait for all nodes ready again
-          ansible.builtin.uri:
-            url: "https://{{ hostvars[item].ansible_host }}:{{ keycloak_mgmt_port }}/health/ready"
-            validate_certs: false
-            status_code: 200
-          register: ready
-          until: ready.status == 200
-          retries: 60
-          delay: 5
-          loop: "{{ groups['keycloak'] }}"
+          loop_control:
+            loop_var: kc_node
 
         - name: Refresh the pre-restart online session
           ansible.builtin.uri:
@@ -221,6 +243,9 @@
               refresh_token: "{{ login.json.refresh_token }}"
             status_code: 200
           register: refreshed
+          until: refreshed.status == 200
+          retries: 10
+          delay: 3
 
         - name: Refresh the pre-restart offline session
           ansible.builtin.uri:
@@ -234,6 +259,9 @@
               refresh_token: "{{ offline_login.json.refresh_token }}"
             status_code: 200
           register: offline_refreshed
+          until: offline_refreshed.status == 200
+          retries: 10
+          delay: 3
 
         - name: Read the claims of the restored session
           ansible.builtin.set_fact:
