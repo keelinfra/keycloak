@@ -1,0 +1,90 @@
+---
+name: ha-smoke
+# 3-node install on the container rig (dev/containers): three privileged
+# Ubuntu 24.04 systemd containers on the runner, Ansible reaching them over
+# ssh from a fourth. Proves the roles converge on three nodes — etcd quorum,
+# a Patroni leader with two streaming replicas, the pgBackRest ssh mesh,
+# certificate distribution, Infinispan clustering — and that a login survives
+# a rolling restart. The single-node smoke on the VM runner remains the guard
+# for what the roles need from a real machine.
+on:
+  push:
+    branches: [main]
+    paths:
+      - roles/**
+      - playbooks/**
+      - dev/containers/**
+      - dev/ha-*.sh
+      - .github/workflows/ha-smoke.yml
+  pull_request:
+    paths:
+      - roles/**
+      - playbooks/**
+      - dev/containers/**
+      - dev/ha-*.sh
+      - .github/workflows/ha-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ha-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  three-node:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      # A docker-container builder (needed for cache export) and the Actions
+      # cache endpoint for BuildKit's type=gha cache.
+      - uses: docker/setup-buildx-action@v4
+      - uses: crazy-max/ghaction-github-runtime@v4
+
+      # Built here, loaded into the runner's daemon, layers cached in the
+      # Actions cache. Never pushed anywhere. Run from the compose file's
+      # directory so the relative build context resolves the same way as
+      # for `docker compose build`; bake wants an explicit entitlement to
+      # read a context outside that directory.
+      - name: Build rig images
+        working-directory: dev/containers
+        run: |
+          docker buildx bake -f compose.yml --load --allow "fs.read=$(cd ../.. && pwd)" \
+            --set '*.cache-from=type=gha' --set '*.cache-to=type=gha,mode=max'
+
+      - name: Start the rig and configure
+        run: dev/ha-up.sh --no-build
+
+      - name: Install
+        run: dev/ha-exec.sh ./install
+
+      - name: Health checks
+        run: dev/ha-exec.sh ./verify
+
+      - name: Session survives a rolling restart
+        run: dev/ha-exec.sh ./verify --drill session
+
+      - name: Resource use
+        if: always()
+        run: |
+          docker stats --no-stream
+          df -h /
+
+      - name: Collect node logs
+        if: always()
+        run: dev/ha-logs.sh .dev/containers/artifacts
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ha-smoke-logs
+          path: .dev/containers/artifacts
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: dev/ha-down.sh

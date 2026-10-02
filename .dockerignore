@@ -1,0 +1,6 @@
+# dev/containers/Dockerfile is built with the repo root as context (it needs
+# requirements.yml and dev/containers/*). Keep everything else out of it.
+*
+!requirements.yml
+!dev/containers/Dockerfile
+!dev/containers/ssh-hostkeys.service

@@ -35,10 +35,10 @@
       become_user: postgres
       community.postgresql.postgresql_query:
         login_host: 127.0.0.1
-        port: "{{ haproxy_pg_port }}"
+        login_port: "{{ haproxy_pg_port }}"
         login_user: "{{ keycloak_db_user }}"
         login_password: "{{ vault_keycloak_db_password }}"
-        db: "{{ keycloak_db_name }}"
+        login_db: "{{ keycloak_db_name }}"
         query: SELECT 1
       changed_when: false
 
@@ -89,10 +89,10 @@
           become_user: postgres
           community.postgresql.postgresql_query:
             login_host: 127.0.0.1
-            port: "{{ haproxy_pg_port }}"
+            login_port: "{{ haproxy_pg_port }}"
             login_user: "{{ keycloak_db_user }}"
             login_password: "{{ vault_keycloak_db_password }}"
-            db: "{{ keycloak_db_name }}"
+            login_db: "{{ keycloak_db_name }}"
             query: "CREATE TABLE IF NOT EXISTS keelinfra_drill (at timestamptz); INSERT INTO keelinfra_drill VALUES (now())"
           register: write_test
           retries: 10

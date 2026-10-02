@@ -1,7 +1,15 @@
 ---
+- name: Note container mode
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }} is a {{ ansible_virtualization_type }} container:
+      hostname, kernel parameters and chrony are left to the container host
+  when: keelinfra_container_mode | bool
+
 - name: Set hostname
   ansible.builtin.hostname:
     name: "{{ inventory_hostname }}"
+  when: not (keelinfra_container_mode | bool)
 
 - name: Ensure cluster nodes resolve each other via /etc/hosts
   ansible.builtin.blockinfile:
@@ -11,6 +19,8 @@
       {% for node in cluster_nodes %}
       {{ node.host }} {{ node.name }}
       {% endfor %}
+    # Docker bind-mounts /etc/hosts; replacing it atomically fails with EBUSY.
+    unsafe_writes: "{{ keelinfra_container_mode | bool }}"
 
 - name: Install base packages
   ansible.builtin.apt:
@@ -24,6 +34,7 @@
     name: chrony
     state: started
     enabled: true
+  when: not (keelinfra_container_mode | bool)
 
 - name: Apply kernel parameters
   ansible.posix.sysctl:
@@ -32,3 +43,4 @@
     sysctl_file: /etc/sysctl.d/90-keelinfra.conf
     reload: true
   loop: "{{ common_sysctl | dict2items }}"
+  when: not (keelinfra_container_mode | bool)
