@@ -7,11 +7,31 @@ behind that claim.
 
 **We do not list an upgrade path we have not run.**
 
-Every listed path runs nightly in CI on a clean single-node install
-([upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml)):
-install the source version, log in, upgrade, and assert the pre-upgrade session
-still refreshes on the target version. Some paths have additionally been drilled
-on a 3-node HA cluster — the Notes column says which.
+Every listed path runs nightly in CI, twice:
+
+- **single-node** ([upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml)):
+  a clean install of the source version on the CI runner itself, log in,
+  `./upgrade`, assert the pre-upgrade session still refreshes on the target.
+- **3-node HA, containers** ([HA matrix](https://github.com/keelinfra/keycloak/actions/workflows/ha-matrix.yml)):
+  the same path on three privileged systemd containers standing in for VMs
+  (`dev/containers/`): install on three nodes, probe every node's load
+  balancer once a second throughout the upgrade, assert all three nodes run
+  the target and every balancer sees every node UP, refresh the pre-upgrade
+  session, then the failover, restore and session drills. Each run leaves a
+  receipt — probe tallies, tarball checksums, phase timings — as its job
+  summary.
+
+The Notes column says what each row has passed so far. "3-node HA drilled
+(VMs)" rows were run by hand on Multipass VMs; "3-node HA drilled (containers,
+nightly CI)" rows link to the run. A row stays "single-node CI only" until a
+green HA-matrix run of it is on record, whatever the matrix file lists.
+
+What the container rig does not prove: its nodes share the runner's kernel —
+no kernel parameters, no chrony, no keepalived VIP — so a sysctl, firewall or
+boot-time problem shows only on the single-node VM run or on real machines;
+and the service windows it measures describe three containers on a 4-vCPU
+runner, not a production topology. `dev/containers/README.md` has the full
+list.
 
 **Don't see your path?**
 [Request it](https://github.com/keelinfra/keycloak/issues/new?template=upgrade_path_request.yml).

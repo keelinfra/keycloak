@@ -32,7 +32,18 @@ dev/ha-exec.sh ./upgrade --to 26.8.0
 dev/ha-exec.sh bash               # a shell on the control node
 dev/ha-logs.sh                    # journals etc. → .dev/containers/artifacts/
 dev/ha-down.sh
+
+dev/ha-drill.sh --from 26.7.3 --to 26.7.5 --strategy rolling   # one matrix row, end to end
 ```
+
+`dev/ha-drill.sh` is what the nightly HA matrix runs (`.github/workflows/ha-matrix.yml`):
+it brings the rig up on FROM, logs in, starts `dev/probe.sh` against every
+node's load balancer, runs `./upgrade --to TO`, reads the probes (a rolling
+path must answer 200 to every one), checks all three nodes and every
+balancer, refreshes the pre-upgrade session, runs every `./verify` drill and
+leaves `.dev/containers/receipt.md`. Tarballs land in `.dev/dist-cache/` and
+are served to the nodes from the control container, so a release is
+downloaded once.
 
 `dev/ha-up.sh --version 26.7.5` installs another version; the cluster
 definition it writes is `.dev/containers/cluster.yml`. A node is reached

@@ -3,8 +3,9 @@ name: upgrade matrix
 # Executes every upgrade path listed in UPGRADES.md, end-to-end, on a clean
 # single-node install: install the FROM version, log in, run ./upgrade, then
 # prove the pre-upgrade session still refreshes on the TO version.
-# This is the single-node run of each path; whether a path has also been
-# drilled on 3 nodes is recorded per row in UPGRADES.md.
+# This is the single-node run of each row in .github/upgrade-paths.yml; the
+# 3-node run of the same rows is ha-matrix.yml, and UPGRADES.md records per
+# row which of the two it has passed.
 on:
   schedule:
     - cron: "17 3 * * *"
@@ -13,71 +14,34 @@ on:
     paths:
       - playbooks/upgrade.yml
       - roles/keycloak/**
+      - .github/upgrade-paths.yml
+      - .github/scripts/upgrade_paths.py
       - .github/workflows/upgrade-matrix.yml
 
 permissions:
   contents: read
 
 jobs:
+  paths:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.rows.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: rows
+        # Every row in .github/upgrade-paths.yml, whatever the trigger.
+        run: |
+          python3 -c 'import yaml' 2>/dev/null || python3 -m pip install --quiet --break-system-packages pyyaml
+          python3 .github/scripts/upgrade_paths.py | tee -a "$GITHUB_OUTPUT"
+
   upgrade:
+    needs: paths
     name: "${{ matrix.from }} → ${{ matrix.to }} (${{ matrix.strategy }})"
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      # One row per path in UPGRADES.md. A new path runs here first and is
-      # only listed as supported after it has passed.
-      # dist_url (optional) installs the TO version from a non-upstream
-      # tarball — used for KeelInfra LTS builds of upstream maintenance tags
-      # that have no community artifacts (kc-*-keel* releases in this repo).
-      # from_dist_url (optional) does the same for the FROM version, for paths
-      # that start on one of those builds.
-      matrix:
-        include:
-          - { from: "26.6.0", to: "26.6.2", strategy: rolling }
-          # 26.7.5 (2026-09-30) is the last community release on the 26.7
-          # branch: 26.8.0 shipped the next day and upstream supports one
-          # release at a time. These rows target it instead of 26.7.3.
-          - { from: "26.6.2", to: "26.7.5", strategy: stop-start }
-          # 26.7.0/26.7.1/26.7.2 carry known regressions fixed in 26.7.3
-          # (sustained high CPU, super-linear admin API cost, offline client
-          # session write conflicts) — this row is the way off them.
-          - { from: "26.7.0", to: "26.7.5", strategy: rolling }
-          # 26.7.3 was this distribution's default install from 2026-08-31 to
-          # 2026-10-01: the patch path to 26.7.5, and the minor paths onto
-          # 26.8, where the next patches land.
-          - { from: "26.7.3", to: "26.7.5", strategy: rolling }
-          - { from: "26.7.3", to: "26.8.0", strategy: stop-start }
-          - { from: "26.7.5", to: "26.8.0", strategy: stop-start }
-          - from: "26.2.5"
-            to: "26.2.16"
-            strategy: rolling
-            dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.2.16-keel1/keycloak-26.2.16.tar.gz"
-          # 26.6 became a second RHBK-only stream: community artifacts stop at
-          # 26.6.4, while 26.6.5, 26.6.6 and 26.6.7 exist as tags only; all
-          # three are built here. 26.6.6 carries 12 CVE fixes over 26.6.4.
-          - from: "26.6.4"
-            to: "26.6.6"
-            strategy: rolling
-            dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.6.6-keel1/keycloak-26.6.6.tar.gz"
-          # 26.6.7 (tagged 2026-09-07, built as kc-26.6.7-keel1 on 2026-10-01)
-          # is the branch head: the rolling hop from the previous build.
-          - from: "26.6.6"
-            to: "26.6.7"
-            strategy: rolling
-            from_dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.6.6-keel1/keycloak-26.6.6.tar.gz"
-            dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.6.7-keel1/keycloak-26.6.7.tar.gz"
-          # The way off the 26.6 LTS builds: start on a kc-26.6.*-keel1 build
-          # (no upstream artifact, hence from_dist_url) and move to the last
-          # community 26.7 release. 26.8.0 is the next hop from there.
-          - from: "26.6.6"
-            to: "26.7.5"
-            strategy: stop-start
-            from_dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.6.6-keel1/keycloak-26.6.6.tar.gz"
-          - from: "26.6.7"
-            to: "26.7.5"
-            strategy: stop-start
-            from_dist_url: "https://github.com/keelinfra/keycloak/releases/download/kc-26.6.7-keel1/keycloak-26.6.7.tar.gz"
+      matrix: ${{ fromJSON(needs.paths.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
 

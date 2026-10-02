@@ -28,8 +28,10 @@ ha_require_docker() {
   docker compose version >/dev/null 2>&1 || { echo "error: the docker compose v2 plugin is required" >&2; exit 1; }
 }
 
-# Collapsible log groups on GitHub Actions, plain headings elsewhere.
+# Collapsible log groups on GitHub Actions, plain headings elsewhere — and
+# plain headings too when a caller already holds a group open (HA_NESTED=1,
+# set by dev/ha-drill.sh for dev/ha-up.sh), since Actions groups do not nest.
 ha_group() {
-  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then echo "::group::$*"; else echo; echo "### $*"; fi
+  if [[ -n "${GITHUB_ACTIONS:-}" && -z "${HA_NESTED:-}" ]]; then echo "::group::$*"; else echo; echo "### $*"; fi
 }
-ha_endgroup() { [[ -z "${GITHUB_ACTIONS:-}" ]] || echo "::endgroup::"; }
+ha_endgroup() { [[ -z "${GITHUB_ACTIONS:-}" || -n "${HA_NESTED:-}" ]] || echo "::endgroup::"; }
