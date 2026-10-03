@@ -1,7 +1,7 @@
 ---
 # keelinfra/keycloak — health checks and operational drills.
 # ./verify                     → health only
-# ./verify --drill failover    → Patroni switchover + write test
+# ./verify --drill failover    → Patroni switchover + write test, until every node has recovered
 # ./verify --drill restore     → pgBackRest restore to a scratch directory
 # ./verify --drill session     → login, rolling restart, session must survive
 # ./verify --drill all         → everything
@@ -108,6 +108,26 @@
           retries: 20
           delay: 3
 
+        # inter 3s / fall 3 / rise 2: a balancer can keep the old leader in
+        # rotation for up to ~9 s after the switchover, round-robin with the
+        # new one, and connections opened to it meanwhile are cut when it is
+        # finally marked down (on-marked-down shutdown-sessions).
+        - name: Wait until every load balancer routes PostgreSQL to the new leader only
+          ansible.builtin.command:
+            cmd: sh -c 'echo "show stat" | socat stdio /run/haproxy/admin.sock'
+          delegate_to: "{{ item }}"
+          loop: "{{ groups['haproxy'] }}"
+          register: pg_routes
+          changed_when: false
+          until: >-
+            pg_routes.stdout_lines
+            | select('match', '^postgres_leader,')
+            | reject('match', '^postgres_leader,(FRONTEND|BACKEND),')
+            | map('split', ',') | selectattr(17, 'match', 'UP')
+            | map(attribute=1) | list == [switch_target]
+          retries: 20
+          delay: 3
+
         - name: Write through haproxy after switchover
           become: true
           become_user: postgres
@@ -124,9 +144,25 @@
           until: write_test is succeeded
           changed_when: true
 
+        # Keycloak's readiness check validates an idle pooled connection and
+        # answers 503 when it draws one of those cut connections, so a node
+        # can turn unready seconds after the switchover itself is over.
+        - name: Wait until Keycloak is ready again on every node
+          ansible.builtin.uri:
+            url: "https://{{ hostvars[item].ansible_host }}:{{ keycloak_mgmt_port }}/health/ready"
+            validate_certs: false
+            status_code: 200
+          loop: "{{ groups['keycloak'] }}"
+          register: kc_ready
+          until: kc_ready.status == 200
+          retries: 20
+          delay: 3
+
         - name: Failover drill passed
           ansible.builtin.debug:
-            msg: "✓ switchover {{ current_leader }} → {{ switch_target }} complete, writes OK through haproxy"
+            msg: >-
+              ✓ switchover {{ current_leader }} → {{ switch_target }} complete: every load
+              balancer routes to it, writes OK through haproxy, Keycloak ready on every node
 
 - name: Restore drill
   hosts: backup_repo
