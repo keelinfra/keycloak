@@ -7,7 +7,8 @@ behind that claim.
 
 **We do not list an upgrade path we have not run.**
 
-Every listed path runs nightly in CI, twice:
+Every listed path runs nightly in CI, twice (the one exception is 26.6.2 → 26.7.0,
+kept as the record of a VM drill; its row says why):
 
 - **single-node** ([upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml)):
   a clean install of the source version on the CI runner itself, log in,
@@ -41,13 +42,13 @@ particular — are the ones we most want to hear about.
 
 | From | To | Strategy | Sessions survive | Verified on | Notes |
 |---|---|---|---|---|---|
-| 26.6.0 | 26.6.2 | rolling | ✅ | 2026-08-25 | **3-node HA drilled.** 156/156 probes OK during upgrade — zero downtime ([probe log](https://keelinfra.io/blog/zero-downtime-keycloak-upgrades/)) |
-| 26.6.2 | 26.7.0 | stop-start | ✅ | 2026-08-25 | **3-node HA drilled.** ~16s service window measured (staged artifacts, stop → cut over → start); sessions persisted in PostgreSQL across the restart. **Do not stop here** — see "Do not land on 26.7.0–26.7.2" below |
-| 26.6.2 | 26.7.5 | stop-start | ✅ | 2026-10-01 | **Single-node CI only** — the 3-node HA drill has not run against this target yet. Same stop-start path as the 26.7.0 row above, which was HA drilled. Listed with target 26.7.3 from 2026-08-31 until 26.7.5 shipped |
-| 26.7.0 | 26.7.5 | rolling | ✅ | 2026-10-01 | **Single-node CI only** — the 3-node HA drill has not run yet. This is the way off 26.7.0–26.7.2. Listed with target 26.7.3 from 2026-08-31 until 26.7.5 shipped |
-| 26.7.3 | 26.7.5 | rolling | ✅ | 2026-10-01 | **Single-node CI only.** The patch path for installs made with this distribution's 26.7.3 default |
-| 26.7.3 | 26.8.0 | stop-start | ✅ | 2026-10-01 | **Single-node CI only.** Minor upgrade — see "26.8.0 on a cluster built with this distribution" below for what the migration touches |
-| 26.7.5 | 26.8.0 | stop-start | ✅ | 2026-10-01 | **Single-node CI only.** Same migration as the row above |
+| 26.6.0 | 26.6.2 | rolling | ✅ | 2026-10-02 | **3-node HA drilled — VMs (2026-08-25) and containers, nightly CI ([run](https://github.com/keelinfra/keycloak/actions/runs/37063697313)).** Zero downtime both times: 156/156 probes answered on the VMs ([probe log](https://keelinfra.io/blog/zero-downtime-keycloak-upgrades/)), 408/408 across three load balancers on the rig |
+| 26.6.2 | 26.7.0 | stop-start | ✅ | 2026-08-25 | **3-node HA drilled (VMs).** ~16s service window measured (staged artifacts, stop → cut over → start); sessions persisted in PostgreSQL across the restart. Kept as the record of that run; not in the nightly matrix, because 26.7.0 is not a version to land on. **Do not stop here** — see "Do not land on 26.7.0–26.7.2" below |
+| 26.6.2 | 26.7.5 | stop-start | ✅ | 2026-10-02 | **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** 17 s service window on all three load balancers; sessions persisted in PostgreSQL across the restart. Listed with target 26.7.3 from 2026-08-31 until 26.7.5 shipped |
+| 26.7.0 | 26.7.5 | rolling | ✅ | 2026-10-02 | **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** 366/366 probes answered across three load balancers — zero downtime. This is the way off 26.7.0–26.7.2. Listed with target 26.7.3 from 2026-08-31 until 26.7.5 shipped |
+| 26.7.3 | 26.7.5 | rolling | ✅ | 2026-10-02 | **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** 444/444 probes answered — zero downtime. The patch path for installs made with this distribution's 26.7.3 default |
+| 26.7.3 | 26.8.0 | stop-start | ✅ | 2026-10-02 | **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** 17 s service window. Minor upgrade — see "26.8.0 on a cluster built with this distribution" below for what the migration touches |
+| 26.7.5 | 26.8.0 | stop-start | ✅ | 2026-10-02 | **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** 16–19 s service window. Same migration as the row above |
 
 ## Do not land on 26.7.0–26.7.2
 
@@ -129,11 +130,11 @@ We build the tags ourselves and publish them as
 
 | From | To | Strategy | Sessions survive | Verified on | Notes |
 |---|---|---|---|---|---|
-| 26.2.5 | 26.2.16 ([kc-26.2.16-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.2.16-keel1)) | rolling | ✅ | 2026-08-28 | Single-node CI drill, runs nightly in the matrix: install the last community release, upgrade via `--dist-url`, pre-upgrade session refreshes, full session drill passes. The 3-node HA drill has **not** yet run for this path — Infinispan was upgraded within the 26.2 branch (15.0.16), so a multi-node rolling upgrade briefly mixes Infinispan versions; run the HA drill before relying on rolling there. |
-| 26.6.4 | 26.6.6 ([kc-26.6.6-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.6-keel1)) | rolling | ✅ | 2026-08-31 | Single-node CI drill, runs nightly in the matrix: install the last community release (26.6.4), upgrade via `--dist-url`, pre-upgrade session refreshes, full session drill passes. The 3-node HA drill has **not** yet run for this path — Infinispan was upgraded within the 26.6 branch (16.0.8 → 16.0.14), so a multi-node rolling upgrade briefly mixes Infinispan versions; run the HA drill before relying on rolling there. |
-| 26.6.6 ([kc-26.6.6-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.6-keel1)) | 26.7.5 | stop-start | ✅ | 2026-10-01 | Single-node CI drill, runs nightly in the matrix: install the LTS build via `keycloak_dist_url`, upgrade to the last community 26.7 release, pre-upgrade session refreshes, full session drill passes. This is the way off the 26.6 stream; 26.7.5 → 26.8.0 in the table above is the next hop. The 3-node HA drill has **not** yet run for this path. |
-| 26.6.6 ([kc-26.6.6-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.6-keel1)) | 26.6.7 ([kc-26.6.7-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.7-keel1)) | rolling | ✅ | 2026-10-01 | Single-node CI drill, runs nightly in the matrix: install the previous LTS build via `keycloak_dist_url`, upgrade to the branch head via `--dist-url`, pre-upgrade session refreshes, full session drill passes. The 3-node HA drill has **not** yet run for this path; the same Infinispan caveat as the 26.6.4 → 26.6.6 row applies. |
-| 26.6.7 ([kc-26.6.7-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.7-keel1)) | 26.7.5 | stop-start | ✅ | 2026-10-01 | Single-node CI drill, runs nightly in the matrix: install the LTS build via `keycloak_dist_url`, upgrade to the last community 26.7 release, pre-upgrade session refreshes, full session drill passes. The way off the 26.6 branch head; 26.7.5 → 26.8.0 in the table above is the next hop. The 3-node HA drill has **not** yet run for this path. |
+| 26.2.5 | 26.2.16 ([kc-26.2.16-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.2.16-keel1)) | rolling | ✅ | 2026-10-02 | Single-node CI and **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** Install the last community release, upgrade via `--dist-url`, pre-upgrade session refreshes, every drill passes; 412/412 probes answered across three load balancers. The nodes run mixed Infinispan versions while the upgrade rolls (Infinispan was upgraded within the 26.2 branch, to 15.0.16); every probe was answered through that window. The probes and the session refresh exercise the load balancers, the realm and persisted sessions, not every cross-node cache path. |
+| 26.6.4 | 26.6.6 ([kc-26.6.6-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.6-keel1)) | rolling | ✅ | 2026-10-02 | Single-node CI and **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** Install the last community release (26.6.4), upgrade via `--dist-url`, pre-upgrade session refreshes, every drill passes; 441/441 probes answered across three load balancers. The nodes run mixed Infinispan versions while the upgrade rolls (16.0.8 → 16.0.14); every probe was answered through that window. The probes and the session refresh exercise the load balancers, the realm and persisted sessions, not every cross-node cache path. |
+| 26.6.6 ([kc-26.6.6-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.6-keel1)) | 26.7.5 | stop-start | ✅ | 2026-10-02 | Single-node CI and **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** Install the LTS build via `keycloak_dist_url`, upgrade to the last community 26.7 release, pre-upgrade session refreshes, every drill passes; 16 s service window. This is the way off the 26.6 stream; 26.7.5 → 26.8.0 in the table above is the next hop. |
+| 26.6.6 ([kc-26.6.6-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.6-keel1)) | 26.6.7 ([kc-26.6.7-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.7-keel1)) | rolling | ✅ | 2026-10-02 | Single-node CI and **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** Install the previous LTS build via `keycloak_dist_url`, upgrade to the branch head via `--dist-url`, pre-upgrade session refreshes, every drill passes; 448/448 probes answered across three load balancers. The Infinispan note on the 26.6.4 → 26.6.6 row applies here too. |
+| 26.6.7 ([kc-26.6.7-keel1](https://github.com/keelinfra/keycloak/releases/tag/kc-26.6.7-keel1)) | 26.7.5 | stop-start | ✅ | 2026-10-02 | Single-node CI and **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** Install the LTS build via `keycloak_dist_url`, upgrade to the last community 26.7 release, pre-upgrade session refreshes, every drill passes; 14–15 s service window. The way off the 26.6 branch head; 26.7.5 → 26.8.0 in the table above is the next hop. |
 
 ### 26.2: the branch head still has a critical unpatched CVE
 
@@ -149,11 +150,15 @@ not drilled yet. Impact analysis and interim mitigation:
 ## Strategies
 
 - **rolling** — patch releases within the same `major.minor` stream (e.g. 26.6.0 → 26.6.2).
-  Nodes are drained and replaced one at a time. Zero downtime.
+  Nodes are drained and replaced one at a time. Zero downtime: every rolling
+  path above answers every probe on three nodes.
 - **stop-start** — minor/major upgrades (e.g. 26.6 → 26.7). The cluster is stopped,
   the database is backed up, the first node runs schema migrations, then all nodes
   return on the new version. Sessions are persisted in PostgreSQL and survive the
-  restart; users are not logged out. Expect a short (~1–2 min) service window.
+  restart; users are not logged out. The service window measured on three
+  nodes is 14–19 s in CI on the container rig and ~16 s on VMs (stop → schema
+  migration on the first node → back in the load balancers); it grows with the
+  migration and your hardware, so plan for a minute or two.
 
 ## Recovering a half-finished upgrade
 

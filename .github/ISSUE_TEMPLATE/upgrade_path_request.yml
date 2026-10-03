@@ -11,9 +11,10 @@ body:
         was executed end-to-end before it was listed: install the source version, log in,
         upgrade, and assert the pre-upgrade session still refreshes. If yours is not there,
         ask for it here. A passing drill goes into the nightly matrix and UPGRADES.md; a
-        failing one gets written up, with what broke. The single-node CI drill is free.
-        A 3-node HA drill, or a rehearsal against a copy of your own realm, is a service
-        engagement — say so below and we will tell you honestly whether you need one.
+        failing one gets written up, with what broke. The single-node and 3-node CI drills
+        are free: a path that passes joins both nightly runs. A rehearsal against a copy of
+        your own realm, or on your own topology, is a service engagement — say so below and
+        we will tell you honestly whether you need one.
   - type: input
     id: from
     attributes:
