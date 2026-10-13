@@ -49,6 +49,8 @@ particular — are the ones we most want to hear about.
 | 26.7.3 | 26.7.5 | rolling | ✅ | 2026-10-02 | **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** 444/444 probes answered — zero downtime. The patch path for installs made with this distribution's 26.7.3 default |
 | 26.7.3 | 26.8.0 | stop-start | ✅ | 2026-10-02 | **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** 17 s service window. Minor upgrade — see "26.8.0 on a cluster built with this distribution" below for what the migration touches |
 | 26.7.5 | 26.8.0 | stop-start | ✅ | 2026-10-02 | **3-node HA drilled (containers, nightly CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/37063697313).** 16–19 s service window. Same migration as the row above |
+| 26.8.0 | 26.8.1 | rolling | ✅ | 2026-10-13 | **3-node HA drilled (containers, PR CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/38382010054).** 442/442 probes answered across three load balancers — zero downtime. The patch path for clusters on 26.8.0; see "26.8.1 on a cluster built with this distribution" below |
+| 26.7.5 | 26.8.1 | stop-start | ✅ | 2026-10-13 | **3-node HA drilled (containers, PR CI) — [run](https://github.com/keelinfra/keycloak/actions/runs/38382010054).** 13 s service window on all three load balancers. Minor upgrade: the 26.8.0 migration plus the 26.8.1 changes, in one stop-start |
 
 ## Do not land on 26.7.0–26.7.2
 
@@ -75,8 +77,10 @@ Neither, any longer, is 26.7.3. [26.7.4](https://github.com/keycloak/keycloak/re
 2026-10-01. Upstream supports one release at a time, so 26.7.5 is the last
 community artifact on the 26.7 branch — later 26.7 tags will be RHBK-only, as
 26.6.5 and later were — and 26.8 is where the next patches land. A cluster on
-26.7.x moves to 26.7.5 (rolling) and then to 26.8.0 (stop-start); a new install
-starts on 26.8.0, this distribution's default since 2026-10-01.
+26.7.x moves to 26.7.5 (rolling) and then to 26.8.1 (stop-start). A new install
+starts on [26.8.1](https://github.com/keycloak/keycloak/releases/tag/26.8.1)
+(2026-10-13), this distribution's default since that day; 26.8.0 was the
+default from 2026-10-01.
 
 ## 26.8.0 on a cluster built with this distribution
 
@@ -102,6 +106,31 @@ these are the items that reach a cluster built here:
 - Not used by this distribution, so not affected: `multi-site` (deprecated),
   `clusterless` (to be removed), `stateless` (now supported, still off) and the
   X.509 authenticator change. The Java requirement is unchanged: OpenJDK 21.
+
+## 26.8.1 on a cluster built with this distribution
+
+26.8.1 is a patch release, mostly security fixes, so the path from 26.8.0 is
+rolling. A few of the fixes change behavior; of the
+[upstream notes](https://www.keycloak.org/docs/latest/upgrading/index.html#migrating-to-26-8-1),
+this is how they meet a cluster built here:
+
+- **SMTP "Enable StartTLS" is now enforced.** If a realm has it on and the mail
+  server does not offer STARTTLS, sending email fails instead of falling back to
+  plaintext. The demo realm here sends no mail; check your own realms' SMTP
+  settings before upgrading.
+- **Changing where an identity provider sends its client secret now needs the
+  secret.** An Admin API update that changes `tokenUrl`, `clientId` and similar
+  fields while sending back the masked `**********` value is rejected with
+  400. Scripts that edit identity providers with `kcadm.sh` must pass
+  `config.clientSecret`, unless the secret is a `${vault.*}` expression.
+- **Backchannel logout tokens from OIDC identity providers are always
+  signature-checked**, even with "Validate Signatures" off. Such a provider
+  needs a JWKS URL or a public key configured.
+- **Semicolons are no longer query parameter delimiters.**
+- Not used by this distribution, so not affected: the X.509 authenticator
+  changes (CRL files only from `conf`, key usage checks, CRL/OCSP size limit)
+  and the Conditional OTP header rule, which now also needs a trusted proxy.
+  The Java requirement is unchanged: OpenJDK 21.
 
 ## KeelInfra LTS builds
 

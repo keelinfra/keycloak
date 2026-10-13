@@ -26,9 +26,14 @@ paths:
   # 26.7.3 was this distribution's default install from 2026-08-31 to
   # 2026-10-01: the patch path to 26.7.5, and the minor paths onto 26.8,
   # where the next patches land.
-  - { from: "26.7.3", to: "26.7.5", strategy: rolling, pr_smoke: true }
+  - { from: "26.7.3", to: "26.7.5", strategy: rolling }
   - { from: "26.7.3", to: "26.8.0", strategy: stop-start }
-  - { from: "26.7.5", to: "26.8.0", strategy: stop-start, pr_smoke: true }
+  - { from: "26.7.5", to: "26.8.0", strategy: stop-start }
+  # 26.8.1 (2026-10-13) is the first 26.8 patch: a security batch on top of
+  # 26.8.0. The rolling hop for clusters already on 26.8.0, and the minor
+  # path from the last 26.7 community release straight onto it.
+  - { from: "26.8.0", to: "26.8.1", strategy: rolling, pr_smoke: true }
+  - { from: "26.7.5", to: "26.8.1", strategy: stop-start, pr_smoke: true }
   - from: "26.2.5"
     to: "26.2.16"
     strategy: rolling

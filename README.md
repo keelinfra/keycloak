@@ -67,7 +67,7 @@ CI runs a clean single-node install with the session and restore drills on every
 ## Upgrades
 
 ```bash
-./upgrade --to 26.8.0
+./upgrade --to 26.8.1
 ```
 
 Supported paths are listed in [UPGRADES.md](UPGRADES.md) and re-verified nightly in CI. We do not claim to support an upgrade path we have not run. Need one that isn't listed? [Request it](https://github.com/keelinfra/keycloak/issues/new?template=upgrade_path_request.yml) — we drill it in public CI before it goes on the list.

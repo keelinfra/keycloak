@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bring up the 3-node container rig and configure the repo against it.
-# Usage: dev/ha-up.sh [--version 26.8.0] [--no-build] [--force]
+# Usage: dev/ha-up.sh [--version 26.8.1] [--no-build] [--force]
 # Then:  dev/ha-exec.sh ./install && dev/ha-exec.sh ./verify --drill all
 # Down:  dev/ha-down.sh            Details: dev/containers/README.md
 set -euo pipefail
@@ -8,7 +8,7 @@ set -euo pipefail
 source "$(dirname "$0")/containers/lib.sh"
 cd "$HA_ROOT"
 
-VERSION="26.8.0" BUILD=1 FORCE=0
+VERSION="26.8.1" BUILD=1 FORCE=0
 [[ "${HA_SKIP_BUILD:-0}" == "1" ]] && BUILD=0
 while [[ $# -gt 0 ]]; do
   case "$1" in

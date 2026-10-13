@@ -28,7 +28,7 @@ built locally or inside the CI job, and never pushed to a registry.
 dev/ha-up.sh                      # build images, start, ./configure
 dev/ha-exec.sh ./install
 dev/ha-exec.sh ./verify --drill all
-dev/ha-exec.sh ./upgrade --to 26.8.0
+dev/ha-exec.sh ./upgrade --to 26.8.1
 dev/ha-exec.sh bash               # a shell on the control node
 dev/ha-logs.sh                    # journals etc. → .dev/containers/artifacts/
 dev/ha-down.sh
