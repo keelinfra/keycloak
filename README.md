@@ -28,7 +28,7 @@ keelinfra is the third option: a distribution you run yourself, with a subscript
 - **HA Keycloak cluster** — multi-node, DB-persisted sessions, load balancer, TLS
 - **PostgreSQL HA** — Patroni-managed, automatic failover
 - **Backups & PITR** — pgBackRest, scheduled, restore-tested
-- **Observability** — Prometheus, Grafana dashboards, alert rules for the things that actually page you
+- **Observability** — Prometheus metrics and alert rules for the things that actually page you; Grafana with the Prometheus data source (no dashboards shipped yet)
 - **Config as code** — realms, clients, and roles managed via keycloak-config-cli
 - **Tested upgrade paths** — every supported path runs nightly, single-node in the [upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml) and on a 3-node cluster under load-balancer probes in the [HA matrix](https://github.com/keelinfra/keycloak/actions/workflows/ha-matrix.yml): install, log in, upgrade, and the pre-upgrade session must survive
 
@@ -47,8 +47,8 @@ Then open `https://<your-host>/admin` and you're done. Full docs: https://keelin
 
 ## Requirements
 
-- 1 or 3 Linux nodes (Ubuntu 22.04/24.04, RHEL/Rocky 9, Debian 12)
-- SSH access with sudo
+- 1 or 3 Linux nodes running Ubuntu 24.04 (tested in CI); Ubuntu 22.04 and Debian 12 are untested, and RHEL/Rocky are not supported yet (the roles install packages with apt)
+- SSH access with passwordless sudo
 - That's it — Ansible runs from the control node, nothing is pre-installed on targets
 
 ## Don't take our word for it
@@ -74,7 +74,7 @@ Supported paths are listed in [UPGRADES.md](UPGRADES.md) and re-verified nightly
 
 ## Subscription
 
-The distribution is free and open source. A yearly subscription adds offline bundles, [CVE tracking](CVE-POLICY.md), upgrade runbooks, and direct access to the people who build it. $1,500 per node, per year — not per user. → https://keelinfra.io/pricing
+The distribution is free and open source. A yearly subscription, in early access, adds [CVE tracking](CVE-POLICY.md), upgrade runbooks, and direct access to the people who build it; offline bundles are planned. $1,500 per node, per year — not per user. → https://keelinfra.io/keycloak/pricing/
 
 CVE tracking means notification, impact analysis against your configuration, and help upgrading along a drilled path — **not** backported patches. [CVE-POLICY.md](CVE-POLICY.md) states the boundary, and works through what "20 CVEs" actually meant for two recent releases.
 

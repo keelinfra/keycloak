@@ -30,5 +30,6 @@ vip: ""
 keycloak_version: "26.8.1"
 
 # TLS: "selfsigned" generates a local CA and certs (good for eval/intranet).
-# Set to "custom" and drop your cert/key at files/tls/<domain>.crt|.key for production.
+# "custom" (bring your own cert) is accepted but not implemented yet: it still
+# generates a self-signed CA. Traffic between the nodes is not encrypted yet.
 tls_mode: selfsigned
