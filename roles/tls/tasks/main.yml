@@ -5,8 +5,13 @@
     state: directory
     mode: "0755"
 
+- name: Ensure ssl-cert group exists
+  ansible.builtin.group:
+    name: ssl-cert
+    state: present
+
 - name: Generate CA and server certificate (CA host only)
-  when: inventory_hostname == tls_ca_host
+  when: tls_mode == 'selfsigned' and inventory_hostname == tls_ca_host
   block:
     - name: Generate CA private key
       community.crypto.openssl_privatekey:
@@ -69,11 +74,6 @@
       loop: [ca.crt, server.crt, server.key]
       register: tls_material
 
-- name: Ensure ssl-cert group exists
-  ansible.builtin.group:
-    name: ssl-cert
-    state: present
-
 - name: Distribute certificate material to all nodes
   ansible.builtin.copy:
     content: "{{ item.content | b64decode }}"
@@ -81,10 +81,27 @@
     owner: root
     group: ssl-cert
     mode: "{{ '0640' if item.item.endswith('.key') else '0644' }}"
-  loop: "{{ hostvars[tls_ca_host].tls_material.results }}"
+  loop: "{{ hostvars[tls_ca_host].tls_material.results | default([]) }}"
   loop_control:
     label: "{{ item.item }}"
-  when: inventory_hostname != tls_ca_host
+  when: tls_mode == 'selfsigned' and inventory_hostname != tls_ca_host
+
+# tls_mode: custom — ./configure already checked the files: not expired, key
+# matches, domain listed. Keycloak re-reads them hourly, so a renewal needs no restart.
+- name: Install provided certificate and key
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ tls_dir }}/{{ item.dest }}"
+    owner: root
+    group: ssl-cert
+    mode: "{{ item.mode }}"
+  loop:
+    - {src: "{{ tls_cert_file }}", dest: server.crt, mode: "0644"}
+    - {src: "{{ tls_key_file }}", dest: server.key, mode: "0640"}
+    - {src: "{{ tls_ca_file }}", dest: ca.crt, mode: "0644"}
+  loop_control:
+    label: "{{ item.dest }}"
+  when: tls_mode == 'custom' and item.src | length > 0
 
 - name: Trust the cluster CA system-wide
   ansible.builtin.copy:
@@ -92,4 +109,5 @@
     dest: /usr/local/share/ca-certificates/{{ cluster_name }}-ca.crt
     remote_src: true
     mode: "0644"
+  when: tls_mode == 'selfsigned' or tls_ca_file | length > 0
   notify: Update CA trust store

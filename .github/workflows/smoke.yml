@@ -54,6 +54,41 @@ jobs:
       - name: Restore drill
         run: ./verify --drill restore
 
+      # Switch the running node to tls_mode: custom, the path a team takes when
+      # it moves from evaluation to its own certificate.
+      - name: Switch to a custom certificate
+        run: |
+          mkdir -p /tmp/ci-tls && cd /tmp/ci-tls
+          openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=CI custom CA" \
+            -addext "basicConstraints=critical,CA:TRUE" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign" \
+            -keyout ca.key -out ca.crt
+          openssl req -newkey rsa:2048 -nodes -subj "/CN=sso.ci.local" \
+            -keyout server.key -out server.csr
+          printf 'subjectAltName=DNS:sso.ci.local\n' > san.cnf
+          openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+            -days 30 -extfile san.cnf -out server.crt
+          cd "$GITHUB_WORKSPACE"
+          sed -i 's/^tls_mode: selfsigned$/tls_mode: custom/' /tmp/ci-cluster.yml
+          # relative to the cluster definition file
+          printf 'tls_cert_file: ci-tls/server.crt\ntls_key_file: ci-tls/server.key\ntls_ca_file: ci-tls/ca.crt\n' \
+            >> /tmp/ci-cluster.yml
+          ./configure -c /tmp/ci-cluster.yml
+          ./install
+          # Keycloak re-reads certificate files hourly; restart to serve the new one now.
+          sudo systemctl restart keycloak
+          for _ in $(seq 60); do curl -fsk https://127.0.0.1:9000/health/ready && break; sleep 5; done
+
+      - name: Custom certificate is served and trusted
+        run: |
+          # --cacert trusts only the custom CA, so the old self-signed cert fails here
+          curl -fsS --cacert /tmp/ci-tls/ca.crt --resolve sso.ci.local:443:127.0.0.1 \
+            https://sso.ci.local/realms/demo/.well-known/openid-configuration | grep -q issuer
+          # the nodes trust the custom CA system-wide
+          curl -fsS --resolve sso.ci.local:443:127.0.0.1 \
+            https://sso.ci.local/realms/demo/.well-known/openid-configuration | grep -q issuer
+          ./verify
+
       - name: Dump service logs on failure
         if: failure()
         run: |

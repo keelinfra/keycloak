@@ -30,6 +30,77 @@
           Invalid cluster definition. Required: cluster_name, domain, ssh_user,
           keycloak_version (26.x.y), and exactly 1 or 3 nodes each with host+name.
 
+    - name: Validate custom TLS certificate
+      when: cfg.tls_mode | default('selfsigned') == 'custom'
+      vars:
+        config_dir: "{{ config_file | dirname }}"
+        tls_cert_expiry: "{{ (tls_cert_info.not_after | to_datetime('%Y%m%d%H%M%SZ')).strftime('%Y-%m-%d') }}"
+      block:
+        - name: Require certificate and key paths
+          ansible.builtin.assert:
+            that:
+              - cfg.tls_cert_file | default('') | length > 0
+              - cfg.tls_key_file | default('') | length > 0
+            fail_msg: >-
+              tls_mode: custom needs tls_cert_file (PEM, server certificate first, then any
+              intermediates) and tls_key_file (unencrypted PEM private key).
+            quiet: true
+
+        # Relative paths are relative to the cluster definition file.
+        - name: Resolve certificate paths
+          ansible.builtin.set_fact:
+            tls_paths:
+              cert: "{{ [config_dir, cfg.tls_cert_file | expanduser] | path_join | realpath }}"
+              key: "{{ [config_dir, cfg.tls_key_file | expanduser] | path_join | realpath }}"
+              ca: >-
+                {{ ([config_dir, cfg.tls_ca_file | expanduser] | path_join | realpath)
+                   if cfg.tls_ca_file | default('') | length > 0 else '' }}
+
+        - name: Read certificate
+          community.crypto.x509_certificate_info:
+            path: "{{ tls_paths.cert }}"
+            valid_at:
+              in_30_days: "+30d"
+          register: tls_cert_info
+
+        - name: Read private key
+          community.crypto.openssl_privatekey_info:
+            path: "{{ tls_paths.key }}"
+          register: tls_key_info
+
+        - name: Read CA certificate
+          community.crypto.x509_certificate_info:
+            path: "{{ tls_paths.ca }}"
+          when: tls_paths.ca | length > 0
+
+        - name: Check certificate is not expired
+          ansible.builtin.assert:
+            that: not tls_cert_info.expired
+            fail_msg: "{{ tls_paths.cert }} expired on {{ tls_cert_expiry }}."
+            quiet: true
+
+        - name: Check certificate covers the domain
+          vars:
+            sans: "{{ tls_cert_info.subject_alt_name | default([], true) | map('lower') | list }}"
+            domain: "{{ cfg.domain | lower }}"
+          ansible.builtin.assert:
+            that: ('dns:' ~ domain) in sans or ('dns:*.' ~ domain.split('.', 1)[-1]) in sans
+            fail_msg: >-
+              {{ tls_paths.cert }} does not list {{ cfg.domain }} in its subject alternative
+              names ({{ sans | join(', ') or 'none' }}).
+            quiet: true
+
+        - name: Check key matches certificate
+          ansible.builtin.assert:
+            that: tls_cert_info.public_key == tls_key_info.public_key
+            fail_msg: "{{ tls_paths.key }} is not the private key for {{ tls_paths.cert }}."
+            quiet: true
+
+        - name: Warn when the certificate expires soon
+          ansible.builtin.debug:
+            msg: "Warning: {{ tls_paths.cert }} expires on {{ tls_cert_expiry }}, within 30 days."
+          when: not tls_cert_info.valid_at.in_30_days
+
     - name: Create inventory directories
       ansible.builtin.file:
         path: "{{ item }}"

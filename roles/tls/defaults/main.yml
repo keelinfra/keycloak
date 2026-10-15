@@ -3,3 +3,7 @@ tls_ca_days: 3650
 tls_cert_days: 730
 # CA lives on the first backup_repo node (node1)
 tls_ca_host: "{{ groups['backup_repo'][0] }}"
+# tls_mode: custom — set by ./configure from the cluster definition
+tls_cert_file: ""
+tls_key_file: ""
+tls_ca_file: ""
