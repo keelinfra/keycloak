@@ -132,7 +132,7 @@ this is how they meet a cluster built here:
   and the Conditional OTP header rule, which now also needs a trusted proxy.
   The Java requirement is unchanged: OpenJDK 21.
 
-## KeelInfra LTS builds
+## keelinfra LTS builds
 
 Upstream cuts patch tags on maintenance branches without publishing community
 artifacts — fixes on those tags ship only in Red Hat's commercial build. Two
@@ -172,7 +172,7 @@ still exposed to **CVE-2026-18963** (critical, CVSS 9.1, unauthenticated account
 takeover via the reset-credentials flow). Upstream's first patched version for
 the 26.0–26.4 range is 26.4.15; there is no patched 26.2 release, so no build of
 a 26.2 tag — `kc-26.2.16-keel1` included — can carry the fix. The only route to
-a fixed version is a minor upgrade off 26.2 (to 26.6.6 or 26.7.3), which we have
+a fixed version is a minor upgrade off 26.2 (to 26.6.6 or later; 26.7.5 and 26.8.1 carry the fix too), which we have
 not drilled yet. Impact analysis and interim mitigation:
 [CVE-POLICY.md](CVE-POLICY.md).
 
@@ -185,7 +185,7 @@ not drilled yet. Impact analysis and interim mitigation:
   the database is backed up, the first node runs schema migrations, then all nodes
   return on the new version. Sessions are persisted in PostgreSQL and survive the
   restart; users are not logged out. The service window measured on three
-  nodes is 14–19 s in CI on the container rig and ~16 s on VMs (stop → schema
+  nodes is 13–19 s in CI on the container rig and ~16 s on VMs (stop → schema
   migration on the first node → back in the load balancers); it grows with the
   migration and your hardware, so plan for a minute or two.
 
