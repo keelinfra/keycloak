@@ -164,7 +164,7 @@
             "uid": "${datasource}"
           },
           "refId": "A",
-          "expr": "sum(patroni_master)",
+          "expr": "sum(patroni_primary)",
           "legendFormat": ""
         }
       ]
@@ -774,7 +774,7 @@
             "uid": "${datasource}"
           },
           "refId": "A",
-          "expr": "patroni_master",
+          "expr": "patroni_primary",
           "legendFormat": "{{instance}}"
         }
       ]

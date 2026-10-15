@@ -17,7 +17,7 @@ groups:
           summary: "Patroni/PostgreSQL on {{ '{{ $labels.instance }}' }} is down"
 
       - alert: NoPostgresLeader
-        expr: sum(patroni_master) == 0 or absent(patroni_master)
+        expr: sum(patroni_primary) == 0 or absent(patroni_primary)
         for: 1m
         labels: {severity: critical}
         annotations:
