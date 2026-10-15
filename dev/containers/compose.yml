@@ -31,6 +31,8 @@ x-node: &node
     - "kc-node1:${HA_PREFIX:-172.28.0}.11"
     - "kc-node2:${HA_PREFIX:-172.28.0}.12"
     - "kc-node3:${HA_PREFIX:-172.28.0}.13"
+    # the off-site backup bucket, served from the control container
+    - "kc-s3:${HA_PREFIX:-172.28.0}.2"
   healthcheck:
     test: ["CMD", "systemctl", "is-active", "--quiet", "ssh"]
     interval: 5s
@@ -75,6 +77,8 @@ services:
       target: control
     container_name: kc-ha-control
     hostname: control
+    extra_hosts:
+      - "kc-s3:127.0.0.1"
     init: true
     working_dir: /work
     volumes:

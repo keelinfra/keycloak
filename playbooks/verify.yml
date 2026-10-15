@@ -4,6 +4,7 @@
 # ./verify --drill failover    → Patroni switchover + write test
 # ./verify --drill restore     → pgBackRest restore to a scratch directory
 # ./verify --drill session     → login, rolling restart, session must survive
+# ./verify --drill alert       → send a test alert to the configured receivers
 # ./verify --drill all         → everything
 
 - name: Health checks
@@ -53,6 +54,100 @@
       ansible.builtin.debug:
         msg: "{{ patroni_list.stdout_lines }}"
       run_once: true
+
+- name: Backup and monitoring health
+  hosts: monitoring
+  gather_facts: false
+  vars:
+    backup_repos: "{{ [1, 2] if backup_s3 | default({}) | length > 0 else [1] }}"
+    # Every metric an alert rule or the overview dashboard depends on. A
+    # renamed or missing one would leave an alert that can never fire.
+    required_metrics:
+      - up{job="keycloak"}
+      - jvm_memory_used_bytes{job="keycloak"}
+      - http_server_requests_seconds_count
+      - agroal_active_count
+      - patroni_master
+      - patroni_replica
+      - patroni_postgres_running
+      - patroni_xlog_location
+      - patroni_xlog_replayed_location
+      - etcd_server_has_leader
+      - pgbackrest_last_backup_timestamp
+      - node_filesystem_avail_bytes
+      - node_cpu_seconds_total
+  tasks:
+    - name: Every repository holds a backup
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: pgbackrest --stanza=main --repo={{ item }} info --output=json
+      loop: "{{ backup_repos }}"
+      register: repo_info
+      changed_when: false
+      failed_when: >-
+        repo_info.rc != 0
+        or not (repo_info.stdout | from_json)
+        or (repo_info.stdout | from_json)[0].backup | default([]) | length == 0
+
+    - name: Prometheus is ready
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port | default(9090) }}/-/ready"
+      changed_when: false
+
+    - name: Alertmanager is ready
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ alertmanager_port | default(9093) }}/-/ready"
+      changed_when: false
+
+    - name: Prometheus sends alerts to Alertmanager
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port | default(9090) }}/api/v1/alertmanagers"
+        return_content: true
+      register: prom_am
+      until: prom_am.json.data.activeAlertmanagers | length > 0
+      retries: 10
+      delay: 3
+      changed_when: false
+
+    - name: Every scrape target is up
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port | default(9090) }}/api/v1/targets?state=active"
+        return_content: true
+      register: prom_targets
+      until: >-
+        prom_targets.json.data.activeTargets | length > 0
+        and prom_targets.json.data.activeTargets | rejectattr('health', 'equalto', 'up') | list | length == 0
+      retries: 20
+      delay: 6
+      changed_when: false
+
+    - name: Refresh the backup metrics
+      ansible.builtin.command: /usr/local/bin/pgbackrest-metrics
+      changed_when: false
+
+    - name: Every metric the alerts and dashboard use has data
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port | default(9090) }}/api/v1/query?query={{ item | urlencode }}"
+        return_content: true
+      loop: "{{ required_metrics }}"
+      register: metric_query
+      until: metric_query.json.data.result | length > 0
+      retries: 10
+      delay: 6
+      changed_when: false
+
+    - name: Grafana serves the keelinfra dashboard
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ grafana_port | default(3000) }}/api/dashboards/uid/keelinfra-overview"
+        user: admin
+        password: "{{ vault_grafana_admin_password }}"
+        force_basic_auth: true
+      register: grafana_dash
+      until: grafana_dash.status == 200
+      retries: 10
+      delay: 3
+      changed_when: false
 
 - name: Failover drill
   hosts: primary
@@ -131,48 +226,15 @@
 - name: Restore drill
   hosts: backup_repo
   gather_facts: false
+  vars:
+    backup_repos: "{{ [1, 2] if backup_s3 | default({}) | length > 0 else [1] }}"
   tasks:
-    - name: Run restore drill
+    - name: Restore the latest backup of every repository to a scratch directory
       when: drill | default('health') in ['restore', 'all']
-      block:
-        - name: Clean scratch restore directory
-          ansible.builtin.file:
-            path: /var/tmp/keelinfra-restore-drill
-            state: absent
-
-        - name: Recreate the scratch restore directory
-          ansible.builtin.file:
-            path: /var/tmp/keelinfra-restore-drill
-            state: directory
-            owner: postgres
-            group: postgres
-            mode: "0700"
-
-        - name: Restore latest backup to scratch directory
-          become: true
-          become_user: postgres
-          ansible.builtin.command:
-            cmd: >-
-              pgbackrest --stanza=main restore
-              --pg1-path=/var/tmp/keelinfra-restore-drill
-              --type=none
-          changed_when: true
-
-        - name: Verify restored cluster files
-          ansible.builtin.stat:
-            path: /var/tmp/keelinfra-restore-drill/PG_VERSION
-          register: restored
-
-        - name: Restore drill result
-          ansible.builtin.assert:
-            that: restored.stat.exists
-            success_msg: "✓ restore to scratch directory OK"
-            fail_msg: "restore completed but PG_VERSION missing"
-
-        - name: Clean up scratch directory
-          ansible.builtin.file:
-            path: /var/tmp/keelinfra-restore-drill
-            state: absent
+      ansible.builtin.include_tasks: tasks/restore_drill_repo.yml
+      loop: "{{ backup_repos }}"
+      loop_control:
+        loop_var: repo
 
 - name: Session survival drill
   hosts: primary
@@ -302,3 +364,76 @@
               ✓ online and offline sessions opened before the restart both refresh after a
               full rolling restart, on the same session id, with identical roles and scopes.
               Not covered: client session notes (upstream #52038) — see UPGRADES.md.
+
+- name: Alert drill
+  hosts: monitoring
+  gather_facts: false
+  vars:
+    am_url: "http://127.0.0.1:{{ alertmanager_port | default(9093) }}"
+    receivers: >-
+      {{ ((['webhook'] if alerting.webhook_url | default('') | length > 0 else [])
+         + (['email'] if alerting.email is defined else []))
+         if alerting is defined else [] }}
+  tasks:
+    - name: Run alert drill
+      when: drill | default('health') in ['alert', 'all']
+      block:
+        - name: Skip when no receiver is configured
+          ansible.builtin.debug:
+            msg: >-
+              No alert receiver is configured (alerting in the cluster definition), so
+              alerts are only visible in Alertmanager and Grafana. Nothing to send.
+          when: receivers | length == 0
+
+        - name: Send a test alert and confirm every receiver accepted it
+          when: receivers | length > 0
+          vars:
+            # Prints "<sent> <failed>": Alertmanager's own notification counters,
+            # summed over the configured receiver integrations.
+            count_cmd: >-
+              curl -fsS {{ am_url }}/metrics | awk -v want="{{ receivers | join(',') }}" '
+              BEGIN { n = split(want, w, ","); for (i = 1; i <= n; i++) keep[w[i]] = 1; s = 0; f = 0 }
+              /^alertmanager_notifications(_failed)?_total[{]/ {
+                split($0, a, "integration=\""); split(a[2], b, "\"");
+                if (!(b[1] in keep)) next;
+                if ($1 ~ /_failed_/) f += $NF; else s += $NF }
+              END { printf "%d %d\n", s, f }'
+          block:
+            - name: Read notification counters before the test
+              ansible.builtin.shell: "{{ count_cmd }}"  # noqa: command-instead-of-shell
+              register: am_before
+              changed_when: false
+
+            - name: Post a test alert to Alertmanager
+              ansible.builtin.uri:
+                url: "{{ am_url }}/api/v2/alerts"
+                method: POST
+                body_format: json
+                body:
+                  - labels:
+                      alertname: KeelinfraTestAlert
+                      severity: info
+                      instance: "{{ inventory_hostname }}"
+                      drill: "{{ now(utc=true).strftime('%Y%m%dT%H%M%S') }}"
+                    annotations:
+                      summary: "Test alert from ./verify --drill alert. No action needed."
+                status_code: 200
+              changed_when: true
+
+            # group_wait is 30 s: the first notification goes out after that.
+            - name: Wait until every receiver has sent the test alert
+              ansible.builtin.shell: "{{ count_cmd }}"  # noqa: command-instead-of-shell
+              register: am_after
+              until: >-
+                (am_after.stdout.split()[0] | int)
+                >= (am_before.stdout.split()[0] | int) + (receivers | length)
+                or (am_after.stdout.split()[1] | int) > (am_before.stdout.split()[1] | int)
+              retries: 30
+              delay: 3
+              changed_when: false
+
+            - name: No notification failed
+              ansible.builtin.assert:
+                that: (am_after.stdout.split()[1] | int) == (am_before.stdout.split()[1] | int)
+                fail_msg: "Alertmanager could not deliver the test alert. Check: journalctl -u prometheus-alertmanager"
+                success_msg: "✓ test alert delivered to: {{ receivers | join(', ') }}"

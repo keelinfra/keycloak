@@ -4,3 +4,8 @@ pgbackrest_repo_path: /var/lib/pgbackrest
 pgbackrest_retention_full: 2
 # repo host = first member of the backup_repo group
 pgbackrest_repo_host: "{{ groups['backup_repo'][0] }}"
+# Optional off-site copy (repo2), set from backup_s3 in the cluster definition
+backup_s3: {}
+pgbackrest_s3_ca_path: /etc/pgbackrest/s3-ca.crt
+# Repositories every backup and restore drill covers: 1 = repo host, 2 = bucket
+pgbackrest_repos: "{{ [1, 2] if backup_s3 | length > 0 else [1] }}"

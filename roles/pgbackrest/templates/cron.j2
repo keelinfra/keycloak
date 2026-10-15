@@ -1,3 +1,8 @@
 # Managed by keelinfra — pgBackRest schedule (runs on the repo host only)
-30 2 * * 0 postgres pgbackrest --stanza={{ pgbackrest_stanza }} --type=full backup
-30 2 * * 1-6 postgres pgbackrest --stanza={{ pgbackrest_stanza }} --type=diff backup
+30 2 * * 0 postgres pgbackrest --stanza={{ pgbackrest_stanza }} --repo=1 --type=full backup
+30 2 * * 1-6 postgres pgbackrest --stanza={{ pgbackrest_stanza }} --repo=1 --type=diff backup
+{% if backup_s3 %}
+# Off-site copy, after the local backup has finished
+30 4 * * 0 postgres pgbackrest --stanza={{ pgbackrest_stanza }} --repo=2 --type=full backup
+30 4 * * 1-6 postgres pgbackrest --stanza={{ pgbackrest_stanza }} --repo=2 --type=diff backup
+{% endif %}

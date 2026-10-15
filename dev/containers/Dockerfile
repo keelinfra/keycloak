@@ -9,7 +9,9 @@
 #             install.
 #   control — the operator's machine: ansible-core in a venv plus the
 #             collections from requirements.yml, so ./configure, ./install,
-#             ./upgrade and ./verify run unchanged.
+#             ./upgrade and ./verify run unchanged. It also stands in for
+#             the off-site backup bucket: an S3 test server (moto) behind a
+#             TLS listener (socat), started by dev/containers/s3-up.sh.
 
 ARG UBUNTU_TAG=24.04
 
@@ -62,6 +64,9 @@ RUN python3 -m venv /opt/ansible \
  && /opt/ansible/bin/ansible-galaxy collection install -r /tmp/requirements.yml \
       -p /root/.ansible/collections \
  && rm /tmp/requirements.yml
+ARG MOTO_SPEC="moto[server]==5.2.4"
+RUN python3 -m venv /opt/s3 \
+ && /opt/s3/bin/pip install --no-cache-dir "${MOTO_SPEC}"
 ENV PATH=/opt/ansible/bin:$PATH
 WORKDIR /work
 CMD ["sleep", "infinity"]

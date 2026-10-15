@@ -64,7 +64,7 @@ jobs:
       - name: Health checks
         run: dev/ha-exec.sh ./verify
 
-      - name: Drills — failover, restore, session across a rolling restart
+      - name: Drills — failover, restore from both repositories, session across a rolling restart, test alert
         run: dev/ha-exec.sh ./verify --drill all
 
       - name: Resource use

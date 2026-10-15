@@ -10,6 +10,28 @@ tls_cert_file: "{{ tls_paths.cert }}"
 tls_key_file: "{{ tls_paths.key }}"
 tls_ca_file: "{{ tls_paths.ca }}"
 {% endif %}
+{% if cfg.backup_s3 is defined %}
+backup_s3:
+  endpoint: "{{ cfg.backup_s3.endpoint.split(':')[0] }}"
+  port: {{ (cfg.backup_s3.endpoint.split(':')[1]) if ':' in cfg.backup_s3.endpoint else 443 }}
+  bucket: "{{ cfg.backup_s3.bucket }}"
+  region: "{{ cfg.backup_s3.region }}"
+  path: "{{ cfg.backup_s3.path | default('/' ~ cfg.cluster_name) }}"
+  uri_style: {{ cfg.backup_s3.uri_style | default('host') }}
+  retention_full: {{ cfg.backup_s3.retention_full | default(4) | int }}
+  ca_file: "{{ backup_s3_ca_path }}"
+{% endif %}
+{% if cfg.alerting is defined %}
+alerting:
+  webhook_url: "{{ cfg.alerting.webhook_url | default('') }}"
+{% if cfg.alerting.email is defined %}
+  email:
+    to: "{{ cfg.alerting.email.to }}"
+    from: "{{ cfg.alerting.email.from }}"
+    smarthost: "{{ cfg.alerting.email.smarthost }}"
+    username: "{{ cfg.alerting.email.username | default('') }}"
+{% endif %}
+{% endif %}
 cluster_nodes:
 {% for node in cfg.nodes %}
   - name: {{ node.name }}

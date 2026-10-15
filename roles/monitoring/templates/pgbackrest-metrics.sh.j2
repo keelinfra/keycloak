@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
-# Managed by keelinfra — export last backup timestamp for Prometheus textfile collector
+# Managed by keelinfra — export the last completed backup per repository for
+# the Prometheus textfile collector. A repository with no backup reports 0,
+# which trips BackupTooOld.
 set -euo pipefail
 out="{{ textfile_dir }}/pgbackrest.prom"
-ts=$(sudo -u postgres pgbackrest --stanza=main info --output=json 2>/dev/null \
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["backup"][-1]["timestamp"]["stop"] if d and d[0].get("backup") else 0)')
+info=$(sudo -u postgres pgbackrest --stanza={{ pgbackrest_stanza | default('main') }} info --output=json 2>/dev/null || echo '[]')
 {
-  echo "# HELP pgbackrest_last_backup_timestamp Unix time of last completed backup"
+  echo "# HELP pgbackrest_last_backup_timestamp Unix time of the last completed backup"
   echo "# TYPE pgbackrest_last_backup_timestamp gauge"
-  echo "pgbackrest_last_backup_timestamp $ts"
+  echo "$info" | python3 -c '
+import json, sys
+repos = [int(r) for r in sys.argv[1].split(",")]
+data = json.load(sys.stdin)
+backups = data[0].get("backup", []) if data else []
+for repo in repos:
+    stops = [b["timestamp"]["stop"] for b in backups if b.get("database", {}).get("repo-key", 1) == repo]
+    print("pgbackrest_last_backup_timestamp{repo=\"%d\"} %d" % (repo, max(stops) if stops else 0))
+' "{{ ([1, 2] if backup_s3 | default({}) | length > 0 else [1]) | join(',') }}"
 } > "$out.tmp" && mv "$out.tmp" "$out"

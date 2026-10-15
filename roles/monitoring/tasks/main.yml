@@ -89,6 +89,41 @@
       ansible.builtin.command: /usr/local/bin/pgbackrest-metrics
       changed_when: false
 
+- name: Install and configure Alertmanager (monitoring host)
+  when: inventory_hostname == monitoring_host
+  block:
+    - name: Install Alertmanager
+      ansible.builtin.apt:
+        name: prometheus-alertmanager
+        state: present
+
+    # One Alertmanager, no gossip peers; local only, like the drill that
+    # talks to it. Operators reach it through Grafana or an ssh tunnel.
+    - name: Set Alertmanager listen addresses
+      ansible.builtin.copy:
+        content: |
+          # Managed by keelinfra
+          ARGS="--web.listen-address=127.0.0.1:{{ alertmanager_port }} --cluster.listen-address="
+        dest: /etc/default/prometheus-alertmanager
+        mode: "0644"
+      register: am_args
+
+    - name: Render Alertmanager configuration
+      ansible.builtin.template:
+        src: alertmanager.yml.j2
+        dest: /etc/prometheus/alertmanager.yml
+        owner: prometheus
+        group: prometheus
+        mode: "0640"
+        validate: amtool check-config %s
+      register: am_conf
+
+    - name: Restart Alertmanager
+      ansible.builtin.systemd:
+        name: prometheus-alertmanager
+        state: "{{ 'restarted' if (am_args.changed or am_conf.changed) else 'started' }}"
+        enabled: true
+
 - name: Install and configure Grafana (monitoring host)
   when: inventory_hostname == monitoring_host
   block:
@@ -124,8 +159,35 @@
         group: grafana
       register: grafana_ds
 
+    - name: Create the dashboard directory
+      ansible.builtin.file:
+        path: "{{ grafana_dashboard_dir }}"
+        state: directory
+        owner: root
+        group: grafana
+        mode: "0750"
+
+    - name: Install keelinfra dashboards
+      ansible.builtin.copy:
+        src: keelinfra-overview.json
+        dest: "{{ grafana_dashboard_dir }}/keelinfra-overview.json"
+        owner: root
+        group: grafana
+        mode: "0640"
+      register: grafana_dash
+
+    - name: Provision the dashboard directory
+      ansible.builtin.template:
+        src: grafana-dashboards.yml.j2
+        dest: /etc/grafana/provisioning/dashboards/keelinfra.yml
+        mode: "0640"
+        group: grafana
+      register: grafana_dash_provider
+
     - name: Restart grafana
       ansible.builtin.systemd:
         name: grafana-server
-        state: "{{ 'restarted' if (grafana_conf.changed or grafana_ds.changed) else 'started' }}"
+        state: >-
+          {{ 'restarted' if (grafana_conf.changed or grafana_ds.changed or grafana_dash.changed
+             or grafana_dash_provider.changed) else 'started' }}
         enabled: true

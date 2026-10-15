@@ -1,0 +1,42 @@
+---
+# One repository's restore drill: restore its latest backup into a scratch
+# directory and check the result is a PostgreSQL data directory.
+# Included from verify.yml with `repo` set (1 = repo host, 2 = off-site bucket).
+- name: Clean scratch restore directory (repo {{ repo }})
+  ansible.builtin.file:
+    path: /var/tmp/keelinfra-restore-drill
+    state: absent
+
+- name: Recreate the scratch restore directory (repo {{ repo }})
+  ansible.builtin.file:
+    path: /var/tmp/keelinfra-restore-drill
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+
+- name: Restore the latest backup to the scratch directory (repo {{ repo }})
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    cmd: >-
+      pgbackrest --stanza=main restore --repo={{ repo }}
+      --pg1-path=/var/tmp/keelinfra-restore-drill
+      --type=none
+  changed_when: true
+
+- name: Verify restored cluster files (repo {{ repo }})
+  ansible.builtin.stat:
+    path: /var/tmp/keelinfra-restore-drill/PG_VERSION
+  register: restored
+
+- name: Restore drill result (repo {{ repo }})
+  ansible.builtin.assert:
+    that: restored.stat.exists
+    success_msg: "✓ restore from repo {{ repo }} to scratch directory OK"
+    fail_msg: "restore from repo {{ repo }} completed but PG_VERSION missing"
+
+- name: Clean up scratch directory (repo {{ repo }})
+  ansible.builtin.file:
+    path: /var/tmp/keelinfra-restore-drill
+    state: absent

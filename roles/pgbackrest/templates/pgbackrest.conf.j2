@@ -13,6 +13,26 @@ repo1-path={{ pgbackrest_repo_path }}
 repo1-host={{ pgbackrest_repo_host }}
 repo1-host-user=postgres
 {% endif %}
+{% if backup_s3 %}
+
+# Off-site copy: every node pushes WAL here as well, the repo host sends
+# its backups. Encrypted with the same cipher passphrase as repo1.
+repo2-type=s3
+repo2-s3-endpoint={{ backup_s3.endpoint }}
+repo2-storage-port={{ backup_s3.port }}
+repo2-s3-bucket={{ backup_s3.bucket }}
+repo2-s3-region={{ backup_s3.region }}
+repo2-s3-uri-style={{ backup_s3.uri_style }}
+repo2-path={{ backup_s3.path }}
+repo2-s3-key={{ vault_backup_s3_key }}
+repo2-s3-key-secret={{ vault_backup_s3_key_secret }}
+{% if backup_s3.ca_file %}
+repo2-storage-ca-file={{ pgbackrest_s3_ca_path }}
+{% endif %}
+repo2-cipher-type=aes-256-cbc
+repo2-cipher-pass={{ vault_pgbackrest_cipher_pass }}
+repo2-retention-full={{ backup_s3.retention_full }}
+{% endif %}
 
 [{{ pgbackrest_stanza }}]
 {% if inventory_hostname == pgbackrest_repo_host %}

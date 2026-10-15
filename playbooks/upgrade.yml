@@ -69,7 +69,7 @@
       become: true
       become_user: postgres
       ansible.builtin.command:
-        cmd: pgbackrest --stanza=main --type=diff backup
+        cmd: pgbackrest --stanza=main --repo=1 --type=diff backup
       changed_when: true
       when: hostvars[groups['keycloak'][0]].upgrade_kind != 'noop'
 
