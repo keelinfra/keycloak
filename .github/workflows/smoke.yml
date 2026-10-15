@@ -78,6 +78,13 @@ jobs:
           # Keycloak re-reads certificate files hourly; restart to serve the new one now.
           sudo systemctl restart keycloak
           for _ in $(seq 60); do curl -fsk https://127.0.0.1:9000/health/ready && break; sleep 5; done
+          # HAProxy marks the node up only after two passing checks 3 s apart;
+          # wait for it to route again before the next step goes through it.
+          for _ in $(seq 30); do
+            curl -fsk --resolve sso.ci.local:443:127.0.0.1 -o /dev/null \
+              https://sso.ci.local/realms/demo/.well-known/openid-configuration && break
+            sleep 2
+          done
 
       - name: Custom certificate is served and trusted
         run: |
