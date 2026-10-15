@@ -75,7 +75,7 @@ Supported paths are listed in [UPGRADES.md](UPGRADES.md) and re-verified nightly
 
 ## Subscription
 
-The distribution is free and open source. A yearly subscription, in early access, adds [CVE tracking](CVE-POLICY.md), upgrade runbooks, and direct access to the people who build it; offline bundles are planned. $1,500 per node, per year — not per user. → https://keelinfra.io/keycloak/pricing/
+The distribution is free and open source. A yearly subscription adds [CVE tracking](CVE-POLICY.md), upgrade runbooks, and direct access to the people who build it; offline bundles join it when they ship. Standard is $4,500 per production cluster per year (up to 3 Keycloak nodes), Enterprise from $12,000 — not per user. → https://keelinfra.io/keycloak/pricing/
 
 CVE tracking means notification, impact analysis against your configuration, and help upgrading along a drilled path — **not** backported patches. [CVE-POLICY.md](CVE-POLICY.md) states the boundary, and works through what "20 CVEs" actually meant for two recent releases.
 
