@@ -5,6 +5,11 @@ keycloak_domain: {{ cfg.domain }}
 keycloak_version: "{{ cfg.keycloak_version }}"
 cluster_vip: "{{ cfg.vip | default('') }}"
 tls_mode: {{ cfg.tls_mode | default('selfsigned') }}
+{% if cfg.tls_mode | default('selfsigned') == 'custom' %}
+tls_cert_file: "{{ tls_paths.cert }}"
+tls_key_file: "{{ tls_paths.key }}"
+tls_ca_file: "{{ tls_paths.ca }}"
+{% endif %}
 cluster_nodes:
 {% for node in cfg.nodes %}
   - name: {{ node.name }}
