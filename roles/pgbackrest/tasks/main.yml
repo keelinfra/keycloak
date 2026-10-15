@@ -66,6 +66,15 @@
     group: postgres
     mode: "0750"
 
+- name: Install the bucket's CA certificate
+  ansible.builtin.copy:
+    src: "{{ backup_s3.ca_file }}"
+    dest: "{{ pgbackrest_s3_ca_path }}"
+    owner: postgres
+    group: postgres
+    mode: "0644"
+  when: backup_s3 | length > 0 and backup_s3.ca_file | length > 0
+
 - name: Render pgbackrest configuration
   ansible.builtin.template:
     src: pgbackrest.conf.j2
@@ -128,17 +137,19 @@
     mode: "0644"
   when: inventory_hostname == pgbackrest_repo_host
 
-- name: Take initial full backup if repo is empty
+- name: Take an initial full backup in every repository that has none
   become: true
   become_user: postgres
   ansible.builtin.shell: |
     set -o pipefail
-    if ! pgbackrest --stanza={{ pgbackrest_stanza }} info --output=json | grep -q '"status":{"code":0'; then
-      pgbackrest --stanza={{ pgbackrest_stanza }} --type=full backup
+    if ! pgbackrest --stanza={{ pgbackrest_stanza }} --repo={{ item }} info --output=json \
+         | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d and d[0].get("backup") else 1)'; then
+      pgbackrest --stanza={{ pgbackrest_stanza }} --repo={{ item }} --type=full backup
       echo "BACKUP_TAKEN"
     fi
   args:
     executable: /bin/bash
+  loop: "{{ pgbackrest_repos }}"
   when: inventory_hostname == pgbackrest_repo_host
   register: initial_backup
   changed_when: "'BACKUP_TAKEN' in initial_backup.stdout"

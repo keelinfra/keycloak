@@ -1,0 +1,10 @@
+# Managed by keelinfra
+apiVersion: 1
+providers:
+  - name: keelinfra
+    folder: keelinfra
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: {{ grafana_dashboard_dir }}

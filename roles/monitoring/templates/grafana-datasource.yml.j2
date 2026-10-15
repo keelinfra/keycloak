@@ -5,3 +5,9 @@ datasources:
     access: proxy
     url: http://127.0.0.1:{{ prometheus_port }}
     isDefault: true
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://127.0.0.1:{{ alertmanager_port }}
+    jsonData:
+      implementation: prometheus

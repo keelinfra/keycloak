@@ -3,6 +3,11 @@ global:
   scrape_interval: 15s
   evaluation_interval: 30s
 
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["127.0.0.1:{{ alertmanager_port }}"]
+
 rule_files:
   - /etc/prometheus/rules/*.yml
 

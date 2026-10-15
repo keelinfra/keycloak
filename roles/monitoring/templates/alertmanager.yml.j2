@@ -1,0 +1,35 @@
+# Managed by keelinfra — where alerts go. Receivers come from `alerting` in
+# the cluster definition; without one, alerts are visible in Alertmanager and
+# Grafana but nobody is notified.
+{% set email = alerting.email | default({}) %}
+{% set webhook = alerting.webhook_url | default('') %}
+global:
+  resolve_timeout: 5m
+{% if email %}
+  smtp_smarthost: "{{ email.smarthost }}"
+  smtp_from: "{{ email.from }}"
+{% if email.username | default('') | length > 0 %}
+  smtp_auth_username: "{{ email.username }}"
+  smtp_auth_password: "{{ vault_smtp_password }}"
+{% endif %}
+{% endif %}
+
+route:
+  receiver: keelinfra
+  group_by: [alertname, instance]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: keelinfra
+{% if webhook %}
+    webhook_configs:
+      - url: "{{ webhook }}"
+        send_resolved: true
+{% endif %}
+{% if email %}
+    email_configs:
+      - to: "{{ email.to }}"
+        send_resolved: true
+{% endif %}

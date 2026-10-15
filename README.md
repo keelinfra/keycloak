@@ -27,8 +27,8 @@ keelinfra is the third option: a distribution you run yourself, with a subscript
 
 - **HA Keycloak cluster** — multi-node, DB-persisted sessions, load balancer, TLS
 - **PostgreSQL HA** — Patroni-managed, automatic failover
-- **Backups & PITR** — pgBackRest, scheduled, restore-tested
-- **Observability** — Prometheus metrics and alert rules for the things that actually page you; Grafana with the Prometheus data source (no dashboards shipped yet)
+- **Backups & PITR** — pgBackRest, scheduled, restore-tested; optional encrypted off-site copy to any S3-compatible bucket
+- **Observability** — Prometheus metrics and alert rules for the things that actually page you, Alertmanager routing to a webhook or email, and a Grafana overview dashboard
 - **Config as code** — realms, clients, and roles managed via keycloak-config-cli
 - **Tested upgrade paths** — every supported path runs nightly, single-node in the [upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml) and on a 3-node cluster under load-balancer probes in the [HA matrix](https://github.com/keelinfra/keycloak/actions/workflows/ha-matrix.yml): install, log in, upgrade, and the pre-upgrade session must survive
 
@@ -43,7 +43,7 @@ cd keycloak
 
 Single machine instead? Use `examples/single-node.yml` — same flow, no HA.
 
-Then open `https://<your-host>/admin` and you're done. Full docs: https://keelinfra.io/docs/keycloak/
+Then open `https://<your-host>/admin` and you're done. Before production, read the [deployment guide](DEPLOYMENT.md): network, backups off the cluster, alert routing. Full docs: https://keelinfra.io/docs/keycloak/
 
 ## Requirements
 
@@ -58,8 +58,9 @@ Every claim above is a drill you can run against your own cluster:
 ```bash
 ./verify                     # health of every component
 ./verify --drill failover    # switch the PostgreSQL leader over, write through it
-./verify --drill restore     # restore the latest backup to a scratch directory
+./verify --drill restore     # restore the latest backup of every repository to a scratch directory
 ./verify --drill session     # rolling-restart every node; logins must survive
+./verify --drill alert       # send a test alert; every configured receiver must accept it
 ```
 
 CI runs a clean single-node install with the session and restore drills on every commit, installs a 3-node cluster and runs every drill on it whenever the roles change, and re-proves every supported upgrade path nightly — single-node, and on three nodes under load-balancer probes.

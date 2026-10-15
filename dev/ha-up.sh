@@ -46,6 +46,10 @@ ha_group "Start containers"
 ha_compose up -d --wait --no-build
 ha_endgroup
 
+ha_group "Start the S3 bucket and alert webhook stand-ins"
+ha_control dev/containers/services-up.sh "$HA_CONTROL_IP"
+ha_endgroup
+
 ha_group "Authorize the rig ssh key on every node"
 for node in "${HA_NODES[@]}"; do
   ha_compose exec -T "$node" sh -c '
@@ -74,6 +78,16 @@ domain: sso.ha.local
 vip: ""
 keycloak_version: "$VERSION"
 tls_mode: selfsigned
+# Off-site backup copy and alert routing, to the stand-ins in the control
+# container (dev/containers/services-up.sh).
+backup_s3:
+  endpoint: kc-s3:9000
+  region: us-east-1
+  bucket: kc-backups
+  uri_style: path
+  ca_file: s3/ca.crt
+alerting:
+  webhook_url: http://$HA_CONTROL_IP:9095/
 CFG
 echo
 echo "Cluster definition written to .dev/containers/cluster.yml:"
@@ -84,7 +98,9 @@ echo
 ha_control sh -c 'rm -f /root/.ssh/known_hosts'
 
 ha_group "Configure"
-ha_control ./configure -c .dev/containers/cluster.yml
+# The stand-in bucket accepts any credentials.
+ha_compose exec -T -w /work -e KEELINFRA_S3_ACCESS_KEY=rig -e KEELINFRA_S3_SECRET_KEY=rig-secret \
+  control ./configure -c .dev/containers/cluster.yml
 ha_endgroup
 echo
 echo "✓ rig is up. Next: dev/ha-exec.sh ./install"

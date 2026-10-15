@@ -17,14 +17,14 @@ groups:
           summary: "Patroni/PostgreSQL on {{ '{{ $labels.instance }}' }} is down"
 
       - alert: NoPostgresLeader
-        expr: sum(patroni_master) == 0 or absent(patroni_master)
+        expr: sum(patroni_primary) == 0 or absent(patroni_primary)
         for: 1m
         labels: {severity: critical}
         annotations:
           summary: "PostgreSQL cluster has no leader — writes are failing"
 
       - alert: PostgresReplicationLag
-        expr: patroni_xlog_replayed_location_lag_bytes > 104857600
+        expr: ((scalar(max(patroni_xlog_location)) - patroni_xlog_replayed_location) and on(instance) (patroni_replica == 1)) > 104857600
         for: 5m
         labels: {severity: warning}
         annotations:
@@ -35,7 +35,21 @@ groups:
         for: 1h
         labels: {severity: warning}
         annotations:
-          summary: "Last pgBackRest backup is older than 26 hours"
+          summary: "Last pgBackRest backup in repo {{ '{{ $labels.repo }}' }} is older than 26 hours"
+
+      - alert: EtcdNoLeader
+        expr: etcd_server_has_leader == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "etcd on {{ '{{ $labels.instance }}' }} has no leader — Patroni cannot fail over"
+
+      - alert: ExporterDown
+        expr: up{job=~"node|postgres|etcd"} == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ '{{ $labels.job }}' }} metrics on {{ '{{ $labels.instance }}' }} are not being scraped"
 
       - alert: DiskAlmostFull
         expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.15

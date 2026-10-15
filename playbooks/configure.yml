@@ -13,6 +13,10 @@
         file: "{{ config_file }}"
         name: cfg
 
+    - name: Read optional settings
+      ansible.builtin.set_fact:
+        smtp_username: "{{ ((cfg.alerting | default({})).email | default({})).username | default('') }}"
+
     - name: Validate cluster definition
       ansible.builtin.assert:
         that:
@@ -101,6 +105,49 @@
             msg: "Warning: {{ tls_paths.cert }} expires on {{ tls_cert_expiry }}, within 30 days."
           when: not tls_cert_info.valid_at.in_30_days
 
+    - name: Validate off-site backup settings
+      when: cfg.backup_s3 is defined
+      block:
+        - name: Require bucket, endpoint and region
+          ansible.builtin.assert:
+            that:
+              - cfg.backup_s3 is mapping
+              - cfg.backup_s3.endpoint | default('') | length > 0
+              - cfg.backup_s3.bucket | default('') | length > 0
+              - cfg.backup_s3.region | default('') | length > 0
+              - cfg.backup_s3.uri_style | default('host') in ['host', 'path']
+              - (cfg.backup_s3.retention_full | default(4) | int) >= 1
+            fail_msg: >-
+              backup_s3 needs endpoint (host or host:port), bucket and region;
+              uri_style is "host" (AWS) or "path" (most self-hosted stores).
+            quiet: true
+
+        - name: Resolve the bucket CA path
+          ansible.builtin.set_fact:
+            backup_s3_ca_path: >-
+              {{ ([config_file | dirname, cfg.backup_s3.ca_file | expanduser] | path_join | realpath)
+                 if cfg.backup_s3.ca_file | default('') | length > 0 else '' }}
+
+        - name: Read the bucket CA certificate
+          community.crypto.x509_certificate_info:
+            path: "{{ backup_s3_ca_path }}"
+          when: backup_s3_ca_path | length > 0
+
+    - name: Validate alert routing
+      when: cfg.alerting is defined
+      ansible.builtin.assert:
+        that:
+          - cfg.alerting is mapping
+          - cfg.alerting.webhook_url is defined or cfg.alerting.email is defined
+          - cfg.alerting.webhook_url | default('https://x') is match('^https?://')
+          - cfg.alerting.email is not defined or (cfg.alerting.email.to | default('') | length > 0
+              and cfg.alerting.email.from | default('') | length > 0
+              and cfg.alerting.email.smarthost | default('') is match('^[^:]+:[0-9]+$'))
+        fail_msg: >-
+          alerting needs webhook_url (http or https), or email with to, from and
+          smarthost (host:port), or both.
+        quiet: true
+
     - name: Create inventory directories
       ansible.builtin.file:
         path: "{{ item }}"
@@ -141,6 +188,71 @@
             cmd: >-
               ansible-vault encrypt
               {{ target_inventory_dir }}/group_vars/all/vault.yml
+          changed_when: true
+
+    # Credentials for the backup bucket and the SMTP relay never go in the
+    # cluster definition (it is meant to be committed). They are read from
+    # the environment on the run that first needs them, then kept encrypted
+    # in vault_integrations.yml; later runs reuse them unless the variable is
+    # set again.
+    - name: Store integration credentials
+      when: cfg.backup_s3 is defined or smtp_username | length > 0
+      vars:
+        integrations_file: "{{ target_inventory_dir }}/group_vars/all/vault_integrations.yml"
+      block:
+        - name: Check for stored integration credentials
+          ansible.builtin.stat:
+            path: "{{ integrations_file }}"
+          register: integrations_stat
+
+        - name: Load stored integration credentials
+          ansible.builtin.include_vars:
+            file: "{{ integrations_file }}"
+            name: stored
+          when: integrations_stat.stat.exists
+
+        - name: Merge environment over stored credentials
+          vars:
+            prev: "{{ stored | default({}) }}"
+          ansible.builtin.set_fact:
+            integration_secrets:
+              vault_backup_s3_key: "{{ lookup('env', 'KEELINFRA_S3_ACCESS_KEY') or prev.vault_backup_s3_key | default('') }}"
+              vault_backup_s3_key_secret: "{{ lookup('env', 'KEELINFRA_S3_SECRET_KEY') or prev.vault_backup_s3_key_secret | default('') }}"
+              vault_smtp_password: "{{ lookup('env', 'KEELINFRA_SMTP_PASSWORD') or prev.vault_smtp_password | default('') }}"
+          no_log: true
+
+        - name: Require the bucket credentials
+          ansible.builtin.assert:
+            that:
+              - integration_secrets.vault_backup_s3_key | length > 0
+              - integration_secrets.vault_backup_s3_key_secret | length > 0
+            fail_msg: >-
+              backup_s3 is set but no bucket credentials are stored yet. Run
+              KEELINFRA_S3_ACCESS_KEY=... KEELINFRA_S3_SECRET_KEY=... ./configure -c <file>
+            quiet: true
+          when: cfg.backup_s3 is defined
+
+        - name: Require the SMTP password
+          ansible.builtin.assert:
+            that: integration_secrets.vault_smtp_password | length > 0
+            fail_msg: >-
+              alerting.email.username is set but no SMTP password is stored yet. Run
+              KEELINFRA_SMTP_PASSWORD=... ./configure -c <file>
+            quiet: true
+          when: smtp_username | length > 0
+
+        - name: Write integration credentials
+          when: stored is not defined or stored != integration_secrets
+          ansible.builtin.copy:
+            content: "{{ '---\n' ~ (integration_secrets | to_nice_yaml) }}"
+            dest: "{{ integrations_file }}"
+            mode: "0600"
+          no_log: true
+
+        - name: Encrypt integration credentials
+          when: stored is not defined or stored != integration_secrets
+          ansible.builtin.command:
+            cmd: ansible-vault encrypt {{ integrations_file }}
           changed_when: true
 
     - name: Check SSH reachability of all nodes
