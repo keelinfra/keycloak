@@ -1,0 +1,30 @@
+# Every apt package the roles install, one per line. bundle/inside-apt.sh
+# downloads these with all their dependencies; postgresql-<postgres_version>
+# is added from playbooks/group_vars/all.yml. When a role starts installing a
+# new package, add it here too: the offline CI job (offline.yml) installs
+# with the nodes cut off from the internet and fails on anything missing.
+
+# roles/common (common_packages)
+chrony
+curl
+gnupg
+ca-certificates
+python3-psycopg2
+acl
+# roles/keycloak
+openjdk-21-jre-headless
+# roles/postgres (PGDG)
+patroni
+# roles/pgbackrest
+pgbackrest
+# roles/haproxy
+haproxy
+socat
+# roles/keepalived
+keepalived
+# roles/monitoring
+prometheus-node-exporter
+prometheus-postgres-exporter
+prometheus
+prometheus-alertmanager
+grafana

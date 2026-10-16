@@ -10,13 +10,16 @@
     - "{{ config_cli_dir }}"
     - "{{ config_cli_dir }}/realms"
 
-- name: Download keycloak-config-cli
-  ansible.builtin.get_url:
-    url: "{{ config_cli_jar_url }}"
-    dest: "{{ config_cli_dir }}/keycloak-config-cli.jar"
-    owner: keycloak
-    group: keycloak
-    mode: "0640"
+- name: Fetch keycloak-config-cli
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: fetch_artifact
+  vars:
+    artifact_url: "{{ config_cli_jar_url }}"
+    artifact_dest: "{{ config_cli_dir }}/keycloak-config-cli.jar"
+    artifact_owner: keycloak
+    artifact_group: keycloak
+    artifact_mode: "0640"
 
 - name: Copy realm definitions
   ansible.builtin.copy:

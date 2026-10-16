@@ -11,11 +11,13 @@
 - name: Download and unpack Keycloak {{ keycloak_version }}
   when: not kc_installed.stat.exists
   block:
-    - name: Download distribution
-      ansible.builtin.get_url:
-        url: "{{ keycloak_dist_url }}"
-        dest: /tmp/keycloak-{{ keycloak_version }}.tar.gz
-        mode: "0644"
+    - name: Fetch distribution
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: fetch_artifact
+      vars:
+        artifact_url: "{{ keycloak_dist_url }}"
+        artifact_dest: /tmp/keycloak-{{ keycloak_version }}.tar.gz
 
     - name: Unpack distribution
       ansible.builtin.unarchive:

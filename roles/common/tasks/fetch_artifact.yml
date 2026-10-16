@@ -1,0 +1,38 @@
+---
+# Put one release artifact on this node (include_role tasks_from, from any role). Online: download it. Offline (the
+# cluster was configured with --offline): copy it from the bundle unpacked
+# on the control node, where bundle/build.sh stored it under its upstream
+# file name.
+# Vars: artifact_url, artifact_dest, and optionally artifact_owner,
+# artifact_group, artifact_mode.
+
+- name: Download {{ artifact_url | basename }}
+  when: keelinfra_offline_dir | default('') | length == 0
+  ansible.builtin.get_url:
+    url: "{{ artifact_url }}"
+    dest: "{{ artifact_dest }}"
+    owner: "{{ artifact_owner | default(omit) }}"
+    group: "{{ artifact_group | default(omit) }}"
+    mode: "{{ artifact_mode | default('0644') }}"
+
+- name: "Copy from the offline bundle: {{ artifact_url | basename }}"
+  when: keelinfra_offline_dir | default('') | length > 0
+  vars:
+    artifact_src: "{{ keelinfra_offline_dir }}/dist/{{ artifact_url | basename }}"
+  block:
+    - name: Check the offline bundle has {{ artifact_url | basename }}
+      ansible.builtin.assert:
+        that: artifact_src is file
+        fail_msg: >-
+          The offline bundle in {{ keelinfra_offline_dir }} has no {{ artifact_url | basename }}.
+          Build a bundle for this version (bundle/build.sh --version {{ keycloak_version }})
+          and pass it with --offline.
+        quiet: true
+
+    - name: Copy {{ artifact_url | basename }}
+      ansible.builtin.copy:
+        src: "{{ artifact_src }}"
+        dest: "{{ artifact_dest }}"
+        owner: "{{ artifact_owner | default(omit) }}"
+        group: "{{ artifact_group | default(omit) }}"
+        mode: "{{ artifact_mode | default('0644') }}"

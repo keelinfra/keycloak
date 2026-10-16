@@ -1,5 +1,6 @@
 ---
 - name: Add PGDG repository
+  when: keelinfra_offline_dir | default('') | length == 0
   ansible.builtin.deb822_repository:
     name: pgdg
     types: deb
@@ -14,7 +15,7 @@
       - "postgresql-{{ postgres_version }}"
       - patroni
     state: present
-    update_cache: true
+    update_cache: "{{ keelinfra_offline_dir | default('') | length == 0 }}"
 
 - name: Stop and disable the default PostgreSQL service (Patroni owns the DB)
   ansible.builtin.systemd:

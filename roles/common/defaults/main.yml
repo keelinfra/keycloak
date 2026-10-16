@@ -19,3 +19,11 @@ common_sysctl:
 keelinfra_container_mode: >-
   {{ ((ansible_virtualization_tech_guest | default([])) + [ansible_virtualization_type | default('')])
      | intersect(['docker', 'podman', 'containerd', 'container', 'lxc']) | length > 0 }}
+
+# Offline mode: where the bundle's apt repository lives on each node.
+# Offline mode itself is on when keelinfra_offline_dir (written by
+# ./configure --offline) is set.
+offline_repo_dir: /opt/keelinfra/offline-repo
+offline_arch_map:
+  x86_64: amd64
+  aarch64: arm64

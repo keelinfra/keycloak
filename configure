@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 # keelinfra/keycloak — configure: validate a cluster definition and render the inventory.
-# Usage: ./configure -c examples/ha-3node.yml
+# Usage: ./configure -c examples/ha-3node.yml [--offline <bundle.tar.gz>]
 set -euo pipefail
 cd "$(dirname "$0")"
 
-CONFIG=""
+CONFIG="" OFFLINE=""
+OFFLINE_DIR="$PWD/inventory/offline"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -c|--config) CONFIG="$2"; shift 2 ;;
+    --offline) OFFLINE="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: ./configure -c <cluster.yml>"
+      echo "Usage: ./configure -c <cluster.yml> [--offline <bundle.tar.gz>]"
       echo "Validates the cluster definition, checks SSH reachability,"
       echo "generates secrets, and renders inventory/ for install/upgrade."
+      echo "--offline installs from a bundle built by bundle/build.sh: the nodes"
+      echo "need no internet access. It is remembered in inventory/offline/;"
+      echo "delete that directory and re-run ./configure to go back online."
       exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -26,7 +31,19 @@ command -v ansible-playbook >/dev/null || {
   exit 1
 }
 
-ansible-galaxy collection install -r requirements.yml >/dev/null
+if [[ -n "$OFFLINE" ]]; then
+  bundle/unpack.sh "$OFFLINE" "$OFFLINE_DIR"
+elif [[ -f "$OFFLINE_DIR/bundle.yml" ]]; then
+  echo "offline: using the bundle in inventory/offline/ (delete it to install online)"
+fi
+
+if [[ -f "$OFFLINE_DIR/bundle.yml" ]]; then
+  ansible-galaxy collection install --offline -r "$OFFLINE_DIR/collections/requirements.yml" >/dev/null
+  EXTRA=(-e "offline_dir=$OFFLINE_DIR")
+else
+  ansible-galaxy collection install -r requirements.yml >/dev/null
+  EXTRA=()
+fi
 
 # Vault password must exist before ansible-vault encrypt runs
 mkdir -p inventory
@@ -40,7 +57,7 @@ export ANSIBLE_VAULT_PASSWORD_FILE="$PWD/inventory/.vault_pass"
 # Render inventory + group_vars + secrets from the cluster definition.
 ansible-playbook playbooks/configure.yml \
   -i localhost, -c local \
-  -e "config_file=$(cd "$(dirname "$CONFIG")" && pwd)/$(basename "$CONFIG")"
+  -e "config_file=$(cd "$(dirname "$CONFIG")" && pwd)/$(basename "$CONFIG")" ${EXTRA[@]+"${EXTRA[@]}"}
 
 echo
 echo "✓ configured. Next: ./install"

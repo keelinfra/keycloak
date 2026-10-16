@@ -27,13 +27,15 @@
 - name: Download and install etcd {{ etcd_version }}
   when: etcd_version not in (etcd_installed.stdout | default(''))
   block:
-    - name: Download etcd release
-      ansible.builtin.get_url:
-        url: >-
+    - name: Fetch etcd release
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: fetch_artifact
+      vars:
+        artifact_url: >-
           https://github.com/etcd-io/etcd/releases/download/v{{ etcd_version
           }}/etcd-v{{ etcd_version }}-linux-{{ etcd_arch_map[ansible_architecture] }}.tar.gz
-        dest: /tmp/etcd-{{ etcd_version }}.tar.gz
-        mode: "0644"
+        artifact_dest: /tmp/etcd-{{ etcd_version }}.tar.gz
 
     - name: Extract etcd binaries
       ansible.builtin.unarchive:

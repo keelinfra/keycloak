@@ -22,11 +22,15 @@
     # Docker bind-mounts /etc/hosts; replacing it atomically fails with EBUSY.
     unsafe_writes: "{{ keelinfra_container_mode | bool }}"
 
+- name: Use the offline package repository
+  when: keelinfra_offline_dir | default('') | length > 0
+  ansible.builtin.include_tasks: offline_repo.yml
+
 - name: Install base packages
   ansible.builtin.apt:
     name: "{{ common_packages }}"
     state: present
-    update_cache: true
+    update_cache: "{{ keelinfra_offline_dir | default('') | length == 0 }}"
     cache_valid_time: 3600
 
 - name: Enable time synchronisation

@@ -34,6 +34,18 @@
           Invalid cluster definition. Required: cluster_name, domain, ssh_user,
           keycloak_version (26.x.y), and exactly 1 or 3 nodes each with host+name.
 
+    - name: Validate the offline bundle
+      when: offline_dir | default('') | length > 0
+      vars:
+        bundle: "{{ lookup('ansible.builtin.file', offline_dir ~ '/bundle.yml') | from_yaml }}"
+      ansible.builtin.assert:
+        that: bundle.keycloak_version == cfg.keycloak_version
+        fail_msg: >-
+          The offline bundle is for Keycloak {{ bundle.keycloak_version }}, the cluster
+          definition asks for {{ cfg.keycloak_version }}. Build a bundle for
+          {{ cfg.keycloak_version }} (bundle/build.sh --version {{ cfg.keycloak_version }}).
+        quiet: true
+
     - name: Validate custom TLS certificate
       when: cfg.tls_mode | default('selfsigned') == 'custom'
       vars:
