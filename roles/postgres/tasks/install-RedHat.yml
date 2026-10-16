@@ -3,8 +3,10 @@
 # the PGDG yum repositories. Nothing creates a database cluster at install
 # time on this family, so there is no default one to drop.
 
-# PGDG's pgBackRest links libssh2, which RHEL ships only in EPEL.
+# PGDG's pgBackRest links libssh2, which RHEL ships only in EPEL. Offline,
+# the bundle carries it and these sources are not added.
 - name: Enable EPEL
+  when: not dnf_offline | bool
   ansible.builtin.dnf:
     name: >-
       {{ 'https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm'
@@ -12,6 +14,7 @@
     state: present
 
 - name: Add PGDG repositories
+  when: not dnf_offline | bool
   ansible.builtin.yum_repository:
     name: "{{ item.name }}"
     description: "PostgreSQL {{ item.name }} (keelinfra)"
@@ -34,6 +37,8 @@
       - patroni
       - patroni-etcd
     state: present
+    disablerepo: "{{ '*' if dnf_offline | bool else omit }}"
+    enablerepo: "{{ 'keelinfra-offline' if dnf_offline | bool else omit }}"
 
 # The packaged unit reads /etc/patroni/patroni.yml; every tool here uses
 # config.yml, as on Debian. This unit takes precedence over the packaged one.

@@ -1,0 +1,34 @@
+# Every dnf package the roles install on Rocky Linux 9, one per line.
+# bundle/inside-dnf.sh downloads these with all their dependencies;
+# postgresql<postgres_version>-server and -contrib are added from
+# playbooks/group_vars/all.yml. When a role starts installing a new package,
+# add it here too: the offline CI job (offline.yml) installs with the nodes
+# cut off from the internet and fails on anything missing. The Prometheus
+# tools are upstream release tarballs on this family (bundle/inside-fetch.sh).
+
+# roles/common (common_packages_el)
+chrony
+gnupg2
+ca-certificates
+python3-psycopg2
+python3-cryptography
+acl
+cronie
+tar
+openssh-clients
+python3-libselinux
+policycoreutils-python-utils
+# roles/keycloak
+java-21-openjdk-headless
+# roles/postgres (PGDG)
+patroni
+patroni-etcd
+# roles/pgbackrest (PGDG, needs libssh2 from EPEL)
+pgbackrest
+# roles/haproxy
+haproxy
+socat
+# roles/keepalived
+keepalived
+# roles/monitoring (Grafana's repository)
+grafana

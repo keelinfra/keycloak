@@ -5,6 +5,8 @@
   ansible.builtin.package:
     name: pgbackrest
     state: present
+    disablerepo: "{{ '*' if dnf_offline | bool else omit }}"
+    enablerepo: "{{ 'keelinfra-offline' if dnf_offline | bool else omit }}"
 
 - name: Ensure repo directory exists (repo host)
   ansible.builtin.file:

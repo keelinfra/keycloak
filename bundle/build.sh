@@ -2,26 +2,29 @@
 # keelinfra/keycloak — build an offline bundle: everything ./install and
 # ./upgrade download, in one tarball, for nodes with no internet access.
 #
-# Usage: bundle/build.sh --version 26.8.1 [--arch amd64|arm64] [--dist-url <url>] [--out <dir>]
+# Usage: bundle/build.sh --version 26.8.1 [--os ubuntu24.04|rocky9] [--arch amd64|arm64]
+#                        [--dist-url <url>] [--out <dir>]
 #
-# Runs on any machine with Docker and internet access. The apt packages are
-# resolved inside an ubuntu:24.04 container of the target architecture, so
-# the bundle matches the nodes, not the machine that builds it (arm64 on an
-# amd64 host needs qemu binfmt, e.g. docker run --privileged tonistiigi/binfmt --install arm64).
+# Runs on any machine with Docker and internet access. The packages are
+# resolved inside an ubuntu:24.04 or rockylinux/rockylinux:9 container of the target
+# architecture, so the bundle matches the nodes, not the machine that builds
+# it (arm64 on an amd64 host needs qemu binfmt, e.g. docker run --privileged tonistiigi/binfmt --install arm64).
+# A rocky9 bundle serves Rocky Linux 9 nodes (RHEL and AlmaLinux 9 untested).
 #
-# Result: <out>/keelinfra-keycloak-offline-<version>-ubuntu24.04-<arch>.tar.gz
+# Result: <out>/keelinfra-keycloak-offline-<version>-<os>-<arch>.tar.gz
 # Use it with: ./configure -c cluster.yml --offline <bundle>   (see bundle/README.md)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-VERSION="" ARCH="" DIST_URL="" OUT="$ROOT/.dev/bundle"
+VERSION="" OS=ubuntu24.04 ARCH="" DIST_URL="" OUT="$ROOT/.dev/bundle"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)  VERSION="$2"; shift 2 ;;
+    --os)       OS="$2"; shift 2 ;;
     --arch)     ARCH="$2"; shift 2 ;;
     --dist-url) DIST_URL="$2"; shift 2 ;;
     --out)      OUT="$2"; shift 2 ;;
-    -h|--help)  sed -n '2,13p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,15p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -34,25 +37,30 @@ if [[ -z "$ARCH" ]]; then
   esac
 fi
 [[ "$ARCH" == amd64 || "$ARCH" == arm64 ]] || { echo "error: --arch must be amd64 or arm64" >&2; exit 1; }
+case "$OS" in
+  ubuntu24.04) IMAGE=ubuntu:24.04;   PACKAGES=inside-apt.sh ;;
+  rocky9)      IMAGE=rockylinux/rockylinux:9; PACKAGES=inside-dnf.sh ;;
+  *) echo "error: --os must be ubuntu24.04 or rocky9" >&2; exit 1 ;;
+esac
 DIST_URL="${DIST_URL:-https://github.com/keycloak/keycloak/releases/download/$VERSION/keycloak-$VERSION.tar.gz}"
 command -v docker >/dev/null || { echo "error: docker not found" >&2; exit 1; }
 
-NAME="keelinfra-keycloak-offline-$VERSION-ubuntu24.04-$ARCH"
+NAME="keelinfra-keycloak-offline-$VERSION-$OS-$ARCH"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 WORK="$OUT/$NAME"
 rm -rf "$WORK"
 mkdir -p "$WORK"
 
-echo "### apt packages (ubuntu 24.04, $ARCH)"
+echo "### packages ($OS, $ARCH)"
 docker run --rm --platform "linux/$ARCH" \
   -v "$ROOT:/src:ro" -v "$WORK:/out" \
-  ubuntu:24.04 bash /src/bundle/inside-apt.sh
+  "$IMAGE" bash "/src/bundle/$PACKAGES"
 
 echo "### release artifacts and Ansible collections"
 docker run --rm \
   -v "$ROOT:/src:ro" -v "$WORK:/out" \
-  -e VERSION="$VERSION" -e ARCH="$ARCH" -e DIST_URL="$DIST_URL" \
+  -e VERSION="$VERSION" -e OS="$OS" -e ARCH="$ARCH" -e DIST_URL="$DIST_URL" \
   ubuntu:24.04 bash /src/bundle/inside-fetch.sh
 
 echo "### tarball"

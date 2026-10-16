@@ -10,6 +10,8 @@
   ansible.builtin.dnf:
     name: java-21-openjdk-headless
     state: present
+    disablerepo: "{{ '*' if dnf_offline | bool else omit }}"
+    enablerepo: "{{ 'keelinfra-offline' if dnf_offline | bool else omit }}"
   when: ansible_os_family == 'RedHat'
 
 - name: Create keycloak user
