@@ -1,0 +1,132 @@
+---
+name: vm
+# Three real VMs (KVM on the runner) from the distributions' cloud images:
+# install, every drill, and what containers cannot show. On Rocky Linux 9
+# SELinux stays enforcing, and the job fails on any SELinux denial; on both
+# OSes the nodes get a real kernel, chrony and hostnames, and Keycloak is
+# reached through the keepalived VIP. dev/vm-up.sh is the same rig locally.
+on:
+  push:
+    branches: [main]
+    paths:
+      - roles/**
+      - playbooks/**
+      - dev/vm-*.sh
+      - dev/containers/**
+      - .github/workflows/vm.yml
+  pull_request:
+    paths:
+      - roles/**
+      - playbooks/**
+      - dev/vm-*.sh
+      - dev/containers/**
+      - .github/workflows/vm.yml
+  schedule:
+    # weekly: the cloud images and the distributions' packages move
+    - cron: "10 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  three-vms:
+    name: three VMs (${{ matrix.os }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [rocky9, ubuntu24.04]
+    env:
+      VM_DISK_DIR: /var/lib/libvirt/images/kc-vm
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Enable KVM and install libvirt
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -q
+          # dnsmasq-base serves DHCP on the libvirt network, ipxe-qemu the
+          # virtio NIC's option ROM and ovmf the UEFI firmware Rocky boots
+          # with; all three are only recommends.
+          sudo apt-get install -y -q --no-install-recommends \
+            qemu-system-x86 qemu-utils libvirt-daemon-system virtinst cloud-image-utils \
+            dnsmasq-base ipxe-qemu ovmf
+          sudo systemctl start libvirtd
+
+      - uses: docker/setup-buildx-action@v4
+      - uses: crazy-max/ghaction-github-runtime@v4
+
+      - name: Build the control image
+        working-directory: dev/containers
+        run: |
+          docker buildx bake -f compose.yml control --load --allow "fs.read=$(cd ../.. && pwd)" \
+            --set '*.cache-from=type=gha' --set '*.cache-to=type=gha,mode=max'
+
+      - name: Boot three ${{ matrix.os }} VMs and configure
+        run: sudo -E dev/vm-up.sh --os ${{ matrix.os }} --mem 4096 --cpus 2
+
+      - name: Install
+        run: sudo dev/vm-exec.sh ./install
+
+      - name: Health checks
+        run: sudo dev/vm-exec.sh ./verify
+
+      - name: Drills — failover, restore from both repositories, session across a rolling restart, test alert
+        run: sudo dev/vm-exec.sh ./verify --drill all
+
+      - name: Keycloak answers on the VIP
+        run: |
+          sudo dev/vm-exec.sh curl -fsSk --retry 10 --retry-delay 3 --retry-all-errors \
+            --resolve sso.vm.local:443:192.168.123.10 -o /dev/null -w '%{http_code}\n' \
+            https://sso.vm.local/realms/master
+
+      - name: SELinux stayed enforcing with no denials
+        if: matrix.os == 'rocky9'
+        run: |
+          fail=0
+          for i in 1 2 3; do
+            ssh="ssh -q -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+              -i .dev/vm/id_ed25519 rocky@192.168.123.1$i"
+            mode="$(sudo $ssh getenforce)"
+            echo "kc-vm$i: $mode"
+            [[ "$mode" == Enforcing ]] || fail=1
+            denials="$(sudo $ssh 'sudo ausearch -m AVC,USER_AVC -ts boot -i 2>/dev/null' || true)"
+            if [[ -n "$denials" ]]; then echo "$denials"; fail=1; fi
+          done
+          exit "$fail"
+
+      - name: Collect node logs
+        if: always()
+        run: sudo -E dev/vm-logs.sh .dev/vm/artifacts && sudo chown -R "$(id -u)" .dev/vm/artifacts
+
+      # The artifact has everything; this puts the usual suspects in the job log.
+      - name: Show the cluster services' last log lines
+        if: failure()
+        run: |
+          for dir in .dev/vm/artifacts/kc-vm*/; do
+            dir="${dir%/}"
+            echo "::group::$(basename "$dir")"
+            cat "$dir/patroni.txt" 2>/dev/null || true
+            grep -E ' (haproxy|patroni|keepalived|kc\.sh|java|keycloak)\[' "$dir/journal.log" | tail -n 150 || true
+            echo "::endgroup::"
+          done
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: vm-${{ matrix.os }}-logs
+          path: .dev/vm/artifacts
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: sudo -E dev/vm-down.sh

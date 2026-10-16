@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Runs inside the control container; dev/ha-up.sh starts it with the control
-# container's address. Brings up the two outside services a production
-# cluster talks to, so the rig exercises them too:
+# Runs inside the control container; dev/ha-up.sh and dev/vm-up.sh start it
+# with the address the nodes reach it at. Brings up the two outside services
+# a production cluster talks to, so the rig exercises them too:
 #   - an S3 bucket for the off-site backup copy: moto on 127.0.0.1:5000,
 #     behind a TLS listener on :9000 (pgBackRest only speaks https to S3),
-#     with a certificate from the rig's own CA in .dev/containers/s3/ — the
+#     with a certificate from the rig's own CA in <state dir>/s3/ — the
 #     way a self-hosted store usually serves it
 #   - an alert webhook on :9095 that appends every POST to
-#     .dev/containers/alerts.log
+#     <state dir>/alerts.log
 # Both are test stand-ins: in-memory, unauthenticated, gone on restart.
 set -euo pipefail
-control_ip="${1:?usage: services-up.sh <control ip>}"
-state=/work/.dev/containers
+control_ip="${1:?usage: services-up.sh <control ip> [state dir]}"
+state="${2:-/work/.dev/containers}"   # dev/vm-up.sh passes /work/.dev/vm
 mkdir -p "$state/s3"
 cd "$state/s3"
 
