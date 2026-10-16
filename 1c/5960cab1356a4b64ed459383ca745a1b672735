@@ -1,0 +1,29 @@
+playbooks/verify.yml
+  s_afbdbd0619a716::t_735ea128ea9da6 318-319,321,388-389
+  s_afbdbd0619a716::t_953b48e4ae3ec9 5,227-317,320,322-387,390-494
+  s_afbdbd0619a716::t_618d8c8c0cf75f 495
+dev/ha-drill.sh
+  s_afbdbd0619a716::t_0135282bde15da 7-8,229-231
+verify
+  s_afbdbd0619a716::t_7e6baa16c2b7d7 2-3
+DEPLOYMENT.md
+  s_afbdbd0619a716::t_34f513b5e66674 156-157
+README.md
+  s_afbdbd0619a716::t_3d700f82c618cb 61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1c5960cab1356a4b64ed459383ca745a1b672735",
+  "prompts": {},
+  "sessions": {
+    "s_afbdbd0619a716": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "42e64b79-77f4-48d4-a04f-7e3155c1d20a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Xianpeng Shen <xianpeng.shen@gmail.com>"
+    }
+  }
+}
