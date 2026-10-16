@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # keelinfra/keycloak — upgrade: move the cluster to a new Keycloak version.
 # Usage: ./upgrade --to 26.6.2 [--force] [--dist-url <url>]
-# --dist-url installs the target from a non-upstream tarball, e.g. a KeelInfra
+# --dist-url installs the target from a non-upstream tarball, e.g. a keelinfra
 # LTS build published at github.com/keelinfra/keycloak/releases (kc-*-keel* tags).
 set -euo pipefail
 cd "$(dirname "$0")"
