@@ -7,6 +7,8 @@
 #             the pgBackRest mesh come in over ssh, as on VMs). Nothing the
 #             roles install themselves is pre-baked: every run is a clean
 #             install.
+#   node-rocky9 — the same for Rocky Linux 9 (dev/ha-up.sh --os rocky9):
+#             what the GenericCloud image ships, user rocky.
 #   control — the operator's machine: ansible-core in a venv plus the
 #             collections from requirements.yml, so ./configure, ./install,
 #             ./upgrade and ./verify run unchanged. It also stands in for
@@ -48,6 +50,33 @@ RUN (id ubuntu >/dev/null 2>&1 || useradd -m ubuntu) \
 RUN : > /etc/machine-id && rm -f /var/lib/dbus/machine-id
 STOPSIGNAL SIGRTMIN+3
 CMD ["/lib/systemd/systemd"]
+
+FROM rockylinux/rockylinux:9 AS node-rocky9
+RUN dnf -y install --setopt=install_weak_deps=False \
+      systemd openssh-server openssh-clients sudo cronie \
+      python3 python3-libselinux ca-certificates iproute procps-ng tar \
+ && dnf clean all
+# Same reasons as for the Ubuntu node: chronyd stays off in containers, and
+# every container gets its own host keys (sshd-keygen makes them at boot).
+RUN systemctl mask chronyd.service \
+ && systemctl enable sshd.service \
+ && rm -f /etc/ssh/ssh_host_*
+# useradd leaves the account locked ("!!"), which sshd on this family
+# refuses even for key logins; cloud-init unlocks it the same way ("*").
+# pam_loginuid cannot write the audit login uid in a container, and
+# pam_unix's account check cannot read /etc/shadow through its helper here
+# ("could not obtain user info"); broken_shadow skips that read. Rig only.
+RUN useradd -m -s /bin/bash rocky \
+ && usermod -p '*' rocky \
+ && echo 'rocky ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-rocky \
+ && chmod 440 /etc/sudoers.d/90-rocky \
+ && sed -i 's/^session\s\+required\s\+pam_loginuid.so/session optional pam_loginuid.so/' /etc/pam.d/sshd \
+ && for f in /etc/pam.d/password-auth /etc/pam.d/system-auth; do \
+      sed -i 's/^\(account\s\+required\s\+pam_unix.so\)\(.*\)$/\1\2 broken_shadow/' "$(readlink -f "$f")"; \
+    done
+RUN : > /etc/machine-id
+STOPSIGNAL SIGRTMIN+3
+CMD ["/usr/sbin/init"]
 
 FROM ubuntu:${UBUNTU_TAG} AS control
 ARG ANSIBLE_CORE_SPEC=ansible-core

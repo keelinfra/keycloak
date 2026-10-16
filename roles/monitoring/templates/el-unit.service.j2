@@ -1,0 +1,18 @@
+# Managed by keelinfra
+[Unit]
+Description={{ item.value.description }}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=prometheus
+Group=prometheus
+{% if item.value.env_file | default('') | length > 0 %}
+EnvironmentFile=-{{ item.value.env_file }}
+{% endif %}
+ExecStart={{ item.value.exec }}
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

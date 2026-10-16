@@ -1,6 +1,8 @@
 ---
+# From Ubuntu on Debian-family nodes, from PGDG (added by the postgres role)
+# on the RHEL family.
 - name: Install pgBackRest
-  ansible.builtin.apt:
+  ansible.builtin.package:
     name: pgbackrest
     state: present
 
@@ -16,7 +18,7 @@
 # --- SSH mesh between postgres users (repo pulls, nodes push WAL) -------
 - name: Ensure postgres .ssh directory exists
   ansible.builtin.file:
-    path: /var/lib/postgresql/.ssh
+    path: "{{ postgres_home }}/.ssh"
     state: directory
     owner: postgres
     group: postgres
@@ -26,7 +28,7 @@
   become: true
   become_user: postgres
   community.crypto.openssh_keypair:
-    path: /var/lib/postgresql/.ssh/id_ed25519
+    path: "{{ postgres_home }}/.ssh/id_ed25519"
     type: ed25519
   register: pg_ssh_key
 
@@ -53,7 +55,7 @@
   become_user: postgres
   ansible.builtin.copy:
     content: "{{ keyscan.stdout }}\n"
-    dest: /var/lib/postgresql/.ssh/known_hosts
+    dest: "{{ postgres_home }}/.ssh/known_hosts"
     owner: postgres
     group: postgres
     mode: "0644"

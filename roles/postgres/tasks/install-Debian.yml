@@ -1,0 +1,35 @@
+---
+- name: Add PGDG repository
+  when: keelinfra_offline_dir | default('') | length == 0
+  ansible.builtin.deb822_repository:
+    name: pgdg
+    types: deb
+    uris: https://apt.postgresql.org/pub/repos/apt
+    suites: "{{ ansible_distribution_release }}-pgdg"
+    components: main
+    signed_by: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+
+- name: Install PostgreSQL and Patroni
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ postgres_version }}"
+      - patroni
+    state: present
+    update_cache: "{{ keelinfra_offline_dir | default('') | length == 0 }}"
+
+- name: Stop and disable the default PostgreSQL service (Patroni owns the DB)
+  ansible.builtin.systemd:
+    name: postgresql
+    state: stopped
+    enabled: false
+
+- name: Check for apt-created default cluster
+  ansible.builtin.stat:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main/PG_VERSION"
+  register: default_cluster
+
+- name: Drop apt-created default cluster
+  ansible.builtin.command:
+    cmd: pg_dropcluster --stop {{ postgres_version }} main
+  when: default_cluster.stat.exists
+  changed_when: true

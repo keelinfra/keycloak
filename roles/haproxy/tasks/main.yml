@@ -1,8 +1,37 @@
 ---
 - name: Install HAProxy and socat
-  ansible.builtin.apt:
+  ansible.builtin.package:
     name: [haproxy, socat]
     state: present
+
+# Debian's package creates /run/haproxy for the stats socket; the RHEL
+# family's does not.
+- name: Give HAProxy a runtime directory (RHEL family)
+  when: ansible_os_family == 'RedHat'
+  block:
+    - name: Create the unit drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/haproxy.service.d
+        state: directory
+        mode: "0755"
+
+    - name: Add the runtime directory to the unit
+      ansible.builtin.copy:
+        content: |
+          # Managed by keelinfra
+          [Service]
+          RuntimeDirectory=haproxy
+        dest: /etc/systemd/system/haproxy.service.d/keelinfra.conf
+        mode: "0644"
+
+# SELinux confines HAProxy to its own ports; it fronts PostgreSQL, Patroni
+# and Keycloak here.
+- name: Let HAProxy connect to the cluster ports under SELinux
+  ansible.posix.seboolean:
+    name: haproxy_connect_any
+    state: true
+    persistent: true
+  when: ansible_selinux.status | default('disabled') == 'enabled'
 
 - name: Render haproxy configuration
   ansible.builtin.template:
@@ -17,6 +46,7 @@
     name: haproxy
     state: started
     enabled: true
+    daemon_reload: true
 
 - name: Apply pending configuration before health checks
   ansible.builtin.meta: flush_handlers

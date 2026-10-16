@@ -1,4 +1,16 @@
 ---
+- name: Check the operating system
+  ansible.builtin.assert:
+    that: >-
+      ansible_os_family == 'Debian'
+      or (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9'
+          and ansible_distribution in ['RedHat', 'Rocky', 'AlmaLinux'])
+    fail_msg: >-
+      {{ inventory_hostname }} runs {{ ansible_distribution }} {{ ansible_distribution_version }}.
+      The roles support the Debian family (Ubuntu 24.04 is tested) and RHEL,
+      Rocky Linux or AlmaLinux 9 (Rocky Linux 9 is tested).
+    quiet: true
+
 - name: Note container mode
   ansible.builtin.debug:
     msg: >-
@@ -32,10 +44,26 @@
     state: present
     update_cache: "{{ keelinfra_offline_dir | default('') | length == 0 }}"
     cache_valid_time: 3600
+  when: ansible_os_family == 'Debian'
+
+- name: Install base packages (RHEL family)
+  ansible.builtin.dnf:
+    name: "{{ common_packages_el }}"
+    state: present
+  when: ansible_os_family == 'RedHat'
+
+# Ubuntu images ship cron running; minimal RHEL-family installs may not.
+# pgBackRest's schedule and the backup metrics live in /etc/cron.d.
+- name: Run cron (RHEL family)
+  ansible.builtin.systemd:
+    name: crond
+    state: started
+    enabled: true
+  when: ansible_os_family == 'RedHat'
 
 - name: Enable time synchronisation
   ansible.builtin.service:
-    name: chrony
+    name: "{{ 'chronyd' if ansible_os_family == 'RedHat' else 'chrony' }}"
     state: started
     enabled: true
   when: not (keelinfra_container_mode | bool)

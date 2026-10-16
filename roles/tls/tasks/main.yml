@@ -106,7 +106,9 @@
 - name: Trust the cluster CA system-wide
   ansible.builtin.copy:
     src: "{{ tls_dir }}/ca.crt"
-    dest: /usr/local/share/ca-certificates/{{ cluster_name }}-ca.crt
+    dest: >-
+      {{ '/etc/pki/ca-trust/source/anchors' if ansible_os_family == 'RedHat'
+         else '/usr/local/share/ca-certificates' }}/{{ cluster_name }}-ca.crt
     remote_src: true
     mode: "0644"
   when: tls_mode == 'selfsigned' or tls_ca_file | length > 0

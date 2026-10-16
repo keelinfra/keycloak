@@ -1,15 +1,11 @@
 ---
+# Exporters on every node; Prometheus, Alertmanager and Grafana on the
+# monitoring host. Debian packages on Ubuntu; upstream release binaries
+# under the same unit names on the RHEL family, which packages none of them.
+- name: Install monitoring software
+  ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
+
 # --- every node: exporters ---------------------------------------------
-- name: Install node exporter
-  ansible.builtin.apt:
-    name: prometheus-node-exporter
-    state: present
-
-- name: Install postgres exporter
-  ansible.builtin.apt:
-    name: prometheus-postgres-exporter
-    state: present
-
 - name: Configure postgres exporter connection
   ansible.builtin.copy:
     content: >
@@ -32,12 +28,6 @@
     enabled: true
 
 # --- monitoring host: prometheus + grafana + backup metrics ------------
-- name: Install Prometheus (monitoring host)
-  ansible.builtin.apt:
-    name: prometheus
-    state: present
-  when: inventory_hostname == monitoring_host
-
 - name: Configure Prometheus
   when: inventory_hostname == monitoring_host
   block:
@@ -92,11 +82,6 @@
 - name: Install and configure Alertmanager (monitoring host)
   when: inventory_hostname == monitoring_host
   block:
-    - name: Install Alertmanager
-      ansible.builtin.apt:
-        name: prometheus-alertmanager
-        state: present
-
     # One Alertmanager, no gossip peers; local only, like the drill that
     # talks to it. Operators reach it through Grafana or an ssh tunnel.
     - name: Set Alertmanager listen addresses
@@ -115,7 +100,7 @@
         owner: prometheus
         group: prometheus
         mode: "0640"
-        validate: amtool check-config %s
+        validate: "{{ amtool_bin }} check-config %s"
       register: am_conf
 
     - name: Restart Alertmanager
@@ -127,22 +112,6 @@
 - name: Install and configure Grafana (monitoring host)
   when: inventory_hostname == monitoring_host
   block:
-    - name: Add Grafana repository
-      when: keelinfra_offline_dir | default('') | length == 0
-      ansible.builtin.deb822_repository:
-        name: grafana
-        types: deb
-        uris: https://apt.grafana.com
-        suites: stable
-        components: main
-        signed_by: https://apt.grafana.com/gpg.key
-
-    - name: Install Grafana
-      ansible.builtin.apt:
-        name: grafana
-        state: present
-        update_cache: "{{ keelinfra_offline_dir | default('') | length == 0 }}"
-
     - name: Set Grafana admin password
       community.general.ini_file:
         path: /etc/grafana/grafana.ini

@@ -4,8 +4,13 @@
 postgres_version: 17
 postgres_port: 5432
 patroni_rest_port: 8008
-postgres_data_dir: "/var/lib/postgresql/{{ postgres_version }}/patroni"
-postgres_bin_dir: "/usr/lib/postgresql/{{ postgres_version }}/bin"
+# The postgres user's home: Debian's postgresql-common and PGDG's RPMs
+# (RHEL, Rocky, AlmaLinux) put it, and the binaries, in different places.
+postgres_home: "{{ '/var/lib/pgsql' if ansible_os_family == 'RedHat' else '/var/lib/postgresql' }}"
+postgres_data_dir: "{{ postgres_home }}/{{ postgres_version }}/patroni"
+postgres_bin_dir: >-
+  {{ '/usr/pgsql-' ~ postgres_version ~ '/bin' if ansible_os_family == 'RedHat'
+     else '/usr/lib/postgresql/' ~ postgres_version ~ '/bin' }}
 keycloak_db_name: keycloak
 keycloak_db_user: keycloak
 haproxy_pg_port: 5433
@@ -15,4 +20,6 @@ keycloak_mgmt_port: 9000
 tls_dir: /etc/keelinfra/tls
 # Never rely on the host's default `java` — CI runners preinstall several
 # JDKs with an older one on PATH. Everything JVM-based points here.
-java_home: "/usr/lib/jvm/java-21-openjdk-{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+java_home: >-
+  {{ '/usr/lib/jvm/jre-21-openjdk' if ansible_os_family == 'RedHat'
+     else '/usr/lib/jvm/java-21-openjdk-' ~ ('arm64' if ansible_architecture == 'aarch64' else 'amd64') }}

@@ -49,7 +49,7 @@ Then open `https://<your-host>/admin` and you're done. Before production, read t
 
 ## Requirements
 
-- 1 or 3 Linux nodes running Ubuntu 24.04 (tested in CI); Ubuntu 22.04 and Debian 12 are untested, and RHEL/Rocky are not supported yet (the roles install packages with apt)
+- 1 or 3 Linux nodes running Ubuntu 24.04 or Rocky Linux 9 (both tested in CI). RHEL 9 and AlmaLinux 9 take the same path as Rocky but are not in CI; Ubuntu 22.04 and Debian 12 are untested. On the RHEL family the nodes need EPEL (the roles enable it) and SELinux is not yet tested in enforcing mode; offline bundles are Ubuntu-only for now
 - SSH access with passwordless sudo
 - Internet access from the nodes, or an [offline bundle](bundle/README.md)
 - That's it — Ansible runs from the control node, nothing is pre-installed on targets

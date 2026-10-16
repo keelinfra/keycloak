@@ -7,6 +7,20 @@ common_packages:
   - ca-certificates
   - python3-psycopg2   # for community.postgresql modules
   - acl                # for become_user file operations
+# The same on RHEL, Rocky Linux and AlmaLinux 9. curl is left out: those
+# images ship curl-minimal, which conflicts with the full package.
+common_packages_el:
+  - chrony
+  - gnupg2
+  - ca-certificates
+  - python3-psycopg2
+  - python3-cryptography   # community.crypto on the nodes
+  - acl
+  - cronie
+  - tar                    # unpacking Keycloak and etcd
+  - openssh-clients        # ssh-keyscan for the pgBackRest mesh
+  - python3-libselinux     # Ansible file modules on SELinux hosts
+  - policycoreutils-python-utils
 common_sysctl:
   vm.swappiness: 10
   net.core.somaxconn: 4096

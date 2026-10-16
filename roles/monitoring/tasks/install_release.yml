@@ -1,0 +1,43 @@
+---
+# One upstream Prometheus-project release onto /usr/local/bin (RHEL family).
+# Loop var: release ({key: name, value: monitoring_releases entry}).
+- name: Check the installed {{ release.key }}
+  ansible.builtin.command: "/usr/local/bin/{{ release.value.binaries[0] }} --version"
+  register: release_installed
+  changed_when: false
+  failed_when: false
+
+- name: "Install the release: {{ release.key }}"
+  when: >-
+    ('version ' ~ release.value.version ~ ' ')
+    not in (release_installed.stdout | default('')) ~ (release_installed.stderr | default(''))
+  vars:
+    release_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+    release_dir: "{{ release.key }}-{{ release.value.version }}.linux-{{ release_arch }}"
+    release_base: "https://github.com/{{ release.value.repo }}/releases/download/v{{ release.value.version }}"
+  block:
+    - name: Fetch {{ release.key }}
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: fetch_artifact
+      vars:
+        artifact_url: "{{ release_base }}/{{ release_dir }}.tar.gz"
+        artifact_dest: "/tmp/{{ release_dir }}.tar.gz"
+        artifact_checksum: "sha256:{{ release_base }}/sha256sums.txt"
+
+    - name: Unpack {{ release.key }}
+      ansible.builtin.unarchive:
+        src: "/tmp/{{ release_dir }}.tar.gz"
+        dest: /tmp
+        remote_src: true
+
+    - name: "Install the binaries: {{ release.key }}"
+      ansible.builtin.copy:
+        src: "/tmp/{{ release_dir }}/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+      loop: "{{ release.value.binaries }}"
+      notify: Restart monitoring services
