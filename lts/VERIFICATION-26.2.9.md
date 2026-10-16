@@ -1,6 +1,6 @@
 # Build verification: upstream tag 26.2.9
 
-First feasibility check for the KeelInfra LTS track: prove that an
+First feasibility check for the keelinfra LTS track: prove that an
 **unreleased upstream maintenance tag** — one that carries backported fixes
 but has no community artifacts — can be built from source and produces a
 working server. Executed 2026-08-27.
@@ -89,5 +89,5 @@ across environments and the hashes will differ elsewhere.)
 3. **Next steps:** build the stream head (26.2.16) the same way; wire the
    built artifact into the existing install/upgrade-matrix CI (install
    26.2.5 → upgrade to self-built 26.2.9+ with the session-survival drill);
-   decide artifact naming/branding ("KeelInfra build of Keycloak" — the
+   decide artifact naming/branding ("keelinfra build of Keycloak" — the
    Apache-2.0 grant excludes the Keycloak trademark).

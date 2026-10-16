@@ -19,7 +19,7 @@ on:
         required: true
         type: string
       revision:
-        description: "KeelInfra build revision for this upstream tag"
+        description: "keelinfra build revision for this upstream tag"
         required: false
         default: "1"
         type: string
@@ -85,5 +85,5 @@ jobs:
             echo '```'
           } > notes.md
           gh release create "$rel" dist/* \
-            --title "Keycloak $TAG (KeelInfra build $REV)" \
+            --title "Keycloak $TAG (keelinfra build $REV)" \
             --notes-file notes.md

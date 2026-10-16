@@ -8,7 +8,7 @@
 # passed, and says per row which of the two runs it has passed.
 #
 # dist_url (optional) installs the TO version from a non-upstream tarball —
-# used for KeelInfra LTS builds of upstream maintenance tags that have no
+# used for keelinfra LTS builds of upstream maintenance tags that have no
 # community artifacts (kc-*-keel* releases in this repo). from_dist_url
 # (optional) does the same for the FROM version, for paths that start on one
 # of those builds. pr_smoke: true marks the rows a pull request runs on the
