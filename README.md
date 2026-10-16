@@ -69,6 +69,8 @@ Every claim above is a drill you can run against your own cluster:
 ./verify --drill alert       # send a test alert; every configured receiver must accept it
 ```
 
+When an alert fires, [RUNBOOKS.md](RUNBOOKS.md) says what is broken for your users, what to check and what to do, one section per alert; every alert notification links to its section.
+
 CI runs a clean single-node install with the session and restore drills on every commit, installs a 3-node cluster and runs every drill on it whenever the roles change, and re-proves every supported upgrade path nightly — single-node, and on three nodes under load-balancer probes.
 
 ## Upgrades
