@@ -26,4 +26,6 @@ for i in 1 2 3; do
   on ip.txt ip -br addr
   echo "$node: collected"
 done
+# Serial consoles: the boot, cloud-init and login prompt, even when ssh never came up.
+cp "${VM_DISK_DIR:-$STATE}"/kc-vm*-console.log "$OUT/" 2>/dev/null || true
 echo "→ $OUT"

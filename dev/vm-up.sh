@@ -117,7 +117,8 @@ CLOUD
     --import --disk "path=$DISKS/$node.qcow2,bus=virtio" \
     --disk "path=$DISKS/$node-seed.iso,device=cdrom" \
     --network "network=$NET,mac=52:54:00:6b:00:1$i,model=virtio" \
-    --osinfo detect=on,require=off --graphics none --console pty,target_type=serial \
+    --osinfo detect=on,require=off --graphics none \
+    --serial "file,path=$DISKS/$node-console.log" \
     --noautoconsole
 done
 for i in 1 2 3; do
@@ -128,7 +129,12 @@ for i in 1 2 3; do
          'cloud-init status --wait >/dev/null 2>&1; sudo -n true'; then
       echo "$node ($ip): up"; break
     fi
-    [[ "$attempt" == 90 ]] && { echo "error: $node did not come up" >&2; exit 1; }
+    if [[ "$attempt" == 90 ]]; then
+      echo "error: $node did not come up. DHCP leases and the end of its serial console:" >&2
+      virsh net-dhcp-leases "$NET" >&2 || true
+      tail -n 80 "$DISKS/$node-console.log" >&2 || true
+      exit 1
+    fi
     sleep 5
   done
 done

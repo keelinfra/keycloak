@@ -104,7 +104,18 @@ jobs:
 
       - name: Collect node logs
         if: always()
-        run: sudo dev/vm-logs.sh .dev/vm/artifacts && sudo chown -R "$(id -u)" .dev/vm/artifacts
+        run: sudo -E dev/vm-logs.sh .dev/vm/artifacts && sudo chown -R "$(id -u)" .dev/vm/artifacts
+
+      # The artifact has everything; this puts the usual suspects in the job log.
+      - name: Show the cluster services' last log lines
+        if: failure()
+        run: |
+          for dir in .dev/vm/artifacts/kc-vm*; do
+            echo "::group::$(basename "$dir")"
+            cat "$dir/patroni.txt" 2>/dev/null || true
+            grep -E ' (haproxy|patroni|keepalived|kc\.sh|java|keycloak)\[' "$dir/journal.log" | tail -n 150 || true
+            echo "::endgroup::"
+          done
 
       - uses: actions/upload-artifact@v7
         if: always()
