@@ -44,11 +44,19 @@
     key: "{{ hostvars[item].pg_pubkey }}"
   loop: "{{ groups['postgres'] }}"
 
+# ssh-keyscan leaves out a host that does not answer in time and still
+# exits 0. A node missing here breaks WAL archiving to the repo host later
+# ("Host key verification failed"), so retry until every node is in.
 - name: Scan cluster host keys
   ansible.builtin.command:
-    cmd: ssh-keyscan -T 5 {{ groups['postgres'] | join(' ') }}
+    cmd: ssh-keyscan -T 10 {{ groups['postgres'] | join(' ') }}
   register: keyscan
   changed_when: false
+  retries: 5
+  delay: 3
+  until: >-
+    groups['postgres'] | difference(keyscan.stdout_lines | map('split') | map('first') | list)
+    | length == 0
 
 - name: Trust cluster host keys
   become: true
