@@ -5,11 +5,13 @@
 # story is in README.md next to this file.
 #
 # HA_PREFIX       first three octets of the rig subnet (default 172.28.0)
+# HA_NODE_TARGET  Dockerfile stage for the nodes: node (Ubuntu 24.04, default)
+#                 or node-rocky9; dev/ha-up.sh --os sets it
 # HA_CGROUP_MODE  private (default) or host, if your Docker needs the latter
 name: kc-ha
 
 x-node: &node
-  image: kc-ha-node:local
+  image: kc-ha-${HA_NODE_TARGET:-node}:local
   privileged: true
   cgroup: ${HA_CGROUP_MODE:-private}
   stop_signal: SIGRTMIN+3
@@ -34,7 +36,7 @@ x-node: &node
     # the off-site backup bucket, served from the control container
     - "kc-s3:${HA_PREFIX:-172.28.0}.2"
   healthcheck:
-    test: ["CMD", "systemctl", "is-active", "--quiet", "ssh"]
+    test: ["CMD-SHELL", "systemctl is-active --quiet ssh || systemctl is-active --quiet sshd"]
     interval: 5s
     timeout: 5s
     retries: 24
@@ -46,7 +48,7 @@ services:
     build:
       context: ../..
       dockerfile: dev/containers/Dockerfile
-      target: node
+      target: ${HA_NODE_TARGET:-node}
     container_name: kc-node1
     hostname: kc-node1
     networks:

@@ -4,6 +4,13 @@
     name: openjdk-21-jre-headless
     state: present
     update_cache: "{{ keelinfra_offline_dir | default('') | length == 0 }}"
+  when: ansible_os_family == 'Debian'
+
+- name: Install OpenJDK 21 (RHEL family)
+  ansible.builtin.dnf:
+    name: java-21-openjdk-headless
+    state: present
+  when: ansible_os_family == 'RedHat'
 
 - name: Create keycloak user
   ansible.builtin.user:

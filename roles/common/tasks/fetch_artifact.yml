@@ -4,13 +4,15 @@
 # on the control node, where bundle/build.sh stored it under its upstream
 # file name.
 # Vars: artifact_url, artifact_dest, and optionally artifact_owner,
-# artifact_group, artifact_mode.
+# artifact_group, artifact_mode, and artifact_checksum (get_url's checksum,
+# checked on download only).
 
 - name: Download {{ artifact_url | basename }}
   when: keelinfra_offline_dir | default('') | length == 0
   ansible.builtin.get_url:
     url: "{{ artifact_url }}"
     dest: "{{ artifact_dest }}"
+    checksum: "{{ artifact_checksum | default(omit) }}"
     owner: "{{ artifact_owner | default(omit) }}"
     group: "{{ artifact_group | default(omit) }}"
     mode: "{{ artifact_mode | default('0644') }}"

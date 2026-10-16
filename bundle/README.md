@@ -17,7 +17,7 @@ bundle/build.sh --version 26.2.16 \
 ```
 
 It writes `.dev/bundle/keelinfra-keycloak-offline-<version>-ubuntu24.04-<arch>.tar.gz`
-(about 1 GB) and a `.sha256` file next to it. Versions of etcd,
+(about 850 MB for amd64) and a `.sha256` file next to it. Versions of etcd,
 keycloak-config-cli and PostgreSQL are read from the roles in the checkout
 that builds the bundle, so build from the same checkout you install with.
 
@@ -74,7 +74,7 @@ and a rolling `./upgrade --offline` onto the next patch. It runs on every
 change to the roles or the bundle scripts and weekly, since a package update
 upstream can change the dependency tree.
 
-Limits today: Ubuntu 24.04 nodes only, as for online installs; the rig's
+Limits today: Ubuntu 24.04 nodes only (online installs also support Rocky Linux 9; an RPM bundle is not built yet); the rig's
 control container keeps its internet access (the collections are baked into
 its image), so the control node's offline path is covered by the checksum
 and `--offline` collection install, not by a cut-off control node.

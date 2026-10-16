@@ -43,7 +43,7 @@ postgresql:
   connect_address: {{ ansible_host }}:{{ postgres_port }}
   data_dir: {{ postgres_data_dir }}
   bin_dir: {{ postgres_bin_dir }}
-  pgpass: /var/lib/postgresql/.pgpass_patroni
+  pgpass: {{ postgres_home }}/.pgpass_patroni
   authentication:
     superuser:
       username: postgres

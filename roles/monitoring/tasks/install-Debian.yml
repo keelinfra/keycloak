@@ -1,0 +1,30 @@
+---
+- name: Install the exporters
+  ansible.builtin.apt:
+    name: [prometheus-node-exporter, prometheus-postgres-exporter]
+    state: present
+
+- name: Install Prometheus and Alertmanager (monitoring host)
+  ansible.builtin.apt:
+    name: [prometheus, prometheus-alertmanager]
+    state: present
+  when: inventory_hostname == monitoring_host
+
+- name: Add Grafana repository (monitoring host)
+  when:
+    - inventory_hostname == monitoring_host
+    - keelinfra_offline_dir | default('') | length == 0
+  ansible.builtin.deb822_repository:
+    name: grafana
+    types: deb
+    uris: https://apt.grafana.com
+    suites: stable
+    components: main
+    signed_by: https://apt.grafana.com/gpg.key
+
+- name: Install Grafana (monitoring host)
+  ansible.builtin.apt:
+    name: grafana
+    state: present
+    update_cache: "{{ keelinfra_offline_dir | default('') | length == 0 }}"
+  when: inventory_hostname == monitoring_host

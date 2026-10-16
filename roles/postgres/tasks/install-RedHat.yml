@@ -1,0 +1,72 @@
+---
+# RHEL, Rocky Linux and AlmaLinux 9: PostgreSQL, Patroni and pgBackRest from
+# the PGDG yum repositories. Nothing creates a database cluster at install
+# time on this family, so there is no default one to drop.
+
+# PGDG's pgBackRest links libssh2, which RHEL ships only in EPEL.
+- name: Enable EPEL
+  ansible.builtin.dnf:
+    name: >-
+      {{ 'https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm'
+         if ansible_distribution == 'RedHat' else 'epel-release' }}
+    state: present
+
+- name: Add PGDG repositories
+  ansible.builtin.yum_repository:
+    name: "{{ item.name }}"
+    description: "PostgreSQL {{ item.name }} (keelinfra)"
+    baseurl: "{{ item.baseurl }}"
+    gpgcheck: true
+    gpgkey: https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL
+  loop:
+    - name: "pgdg{{ postgres_version }}"
+      baseurl: "https://download.postgresql.org/pub/repos/yum/{{ postgres_version }}/redhat/rhel-$releasever-$basearch"
+    - name: pgdg-common
+      baseurl: https://download.postgresql.org/pub/repos/yum/common/redhat/rhel-$releasever-$basearch
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Install PostgreSQL and Patroni
+  ansible.builtin.dnf:
+    name:
+      - "postgresql{{ postgres_version }}-server"
+      - "postgresql{{ postgres_version }}-contrib"
+      - patroni
+      - patroni-etcd
+    state: present
+
+# The packaged unit reads /etc/patroni/patroni.yml; every tool here uses
+# config.yml, as on Debian. This unit takes precedence over the packaged one.
+- name: Install the Patroni service unit
+  ansible.builtin.copy:
+    content: |
+      # Managed by keelinfra
+      [Unit]
+      Description=Patroni (PostgreSQL high availability)
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User=postgres
+      Group=postgres
+      ExecStart=/usr/bin/patroni /etc/patroni/config.yml
+      ExecReload=/bin/kill -s HUP $MAINPID
+      KillMode=process
+      TimeoutSec=30
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/patroni.service
+    mode: "0644"
+  notify: Restart patroni
+
+# The package's tmpfiles rule makes the socket directory at boot only.
+- name: Create the PostgreSQL socket directory
+  ansible.builtin.file:
+    path: /run/postgresql
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "2775"

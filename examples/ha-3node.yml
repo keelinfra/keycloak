@@ -15,7 +15,7 @@ nodes:
     name: kc-node3
 
 # SSH connection for Ansible (agent or key-based; password auth not supported)
-ssh_user: ubuntu
+ssh_user: ubuntu      # rocky on Rocky Linux cloud images, ec2-user on RHEL
 # ssh_private_key: ~/.ssh/id_ed25519   # optional, defaults to agent
 
 # Public entrypoint. Users reach Keycloak at https://<domain>/

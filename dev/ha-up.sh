@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # Bring up the 3-node container rig and configure the repo against it.
-# Usage: dev/ha-up.sh [--version 26.8.1] [--no-build] [--force] [--offline <bundle.tar.gz>]
+# Usage: dev/ha-up.sh [--version 26.8.1] [--os ubuntu24.04|rocky9] [--no-build] [--force]
+#                     [--offline <bundle.tar.gz>]
 # --offline cuts the nodes off from the internet and configures from a bundle
 # (bundle/build.sh); the bundle must sit inside the repo, which the control
 # container sees as /work.
 # Then:  dev/ha-exec.sh ./install && dev/ha-exec.sh ./verify --drill all
 # Down:  dev/ha-down.sh            Details: dev/containers/README.md
 set -euo pipefail
+# --os goes to lib.sh, which picks the node image and ssh user from it.
+for ((i = 1; i < $#; i++)); do
+  if [[ "${!i}" == --os ]]; then j=$((i + 1)); export HA_OS="${!j}"; fi
+done
 # shellcheck source=dev/containers/lib.sh
 source "$(dirname "$0")/containers/lib.sh"
 cd "$HA_ROOT"
@@ -19,7 +24,8 @@ while [[ $# -gt 0 ]]; do
     --no-build) BUILD=0; shift ;;
     --force)    FORCE=1; shift ;;
     --offline)  OFFLINE="$2"; shift 2 ;;
-    -h|--help)  sed -n '2,8p' "$0"; exit 0 ;;
+    --os)       HA_OS="$2"; shift 2 ;;
+    -h|--help)  sed -n '2,9p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -42,6 +48,7 @@ if [[ -f inventory/hosts.yml && ! -f "$HA_STATE_DIR/cluster.yml" && "$FORCE" == 
 fi
 
 mkdir -p "$HA_STATE_DIR" .dev/dist-cache
+echo "$HA_OS" > "$HA_STATE_DIR/os"
 if [[ ! -f "$HA_STATE_DIR/id_ed25519" ]]; then
   ssh-keygen -q -t ed25519 -N "" -C "kc-ha rig" -f "$HA_STATE_DIR/id_ed25519"
 fi
@@ -62,11 +69,12 @@ ha_endgroup
 
 ha_group "Authorize the rig ssh key on every node"
 for node in "${HA_NODES[@]}"; do
-  ha_compose exec -T "$node" sh -c '
-    install -d -m 700 -o ubuntu -g ubuntu /home/ubuntu/.ssh &&
-    cat > /home/ubuntu/.ssh/authorized_keys &&
-    chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys &&
-    chmod 600 /home/ubuntu/.ssh/authorized_keys' < "$HA_STATE_DIR/id_ed25519.pub"
+  # shellcheck disable=SC2016  # $U expands on the node
+  ha_compose exec -T -e U="$HA_SSH_USER" "$node" sh -c '
+    install -d -m 700 -o "$U" -g "$U" "/home/$U/.ssh" &&
+    cat > "/home/$U/.ssh/authorized_keys" &&
+    chown "$U:$U" "/home/$U/.ssh/authorized_keys" &&
+    chmod 600 "/home/$U/.ssh/authorized_keys"' < "$HA_STATE_DIR/id_ed25519.pub"
   echo "$node: ok"
 done
 ha_endgroup
@@ -82,7 +90,7 @@ nodes:
     name: ${HA_NODES[1]}
   - host: ${HA_IPS[2]}
     name: ${HA_NODES[2]}
-ssh_user: ubuntu
+ssh_user: $HA_SSH_USER
 ssh_private_key: /work/.dev/containers/id_ed25519
 domain: sso.ha.local
 vip: ""

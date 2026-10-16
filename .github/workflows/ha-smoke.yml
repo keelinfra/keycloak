@@ -6,7 +6,8 @@ name: ha-smoke
 # a Patroni leader with two streaming replicas, the pgBackRest ssh mesh,
 # certificate distribution, Infinispan clustering — and that a login survives
 # a rolling restart. The single-node smoke on the VM runner remains the guard
-# for what the roles need from a real machine.
+# for what the roles need from a real machine. A second job runs the same
+# on Rocky Linux 9 nodes.
 on:
   push:
     branches: [main]
@@ -81,6 +82,58 @@ jobs:
         if: always()
         with:
           name: ha-smoke-logs
+          path: .dev/containers/artifacts
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: dev/ha-down.sh
+
+  # The same on Rocky Linux 9 nodes: PGDG and EPEL packages, upstream
+  # Prometheus binaries, the RHEL-family paths. Containers run without
+  # SELinux, so this does not cover an enforcing host.
+  three-node-rocky9:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      HA_OS: rocky9
+      HA_NODE_TARGET: node-rocky9
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+      - uses: crazy-max/ghaction-github-runtime@v4
+
+      - name: Build rig images
+        working-directory: dev/containers
+        run: |
+          docker buildx bake -f compose.yml --load --allow "fs.read=$(cd ../.. && pwd)" \
+            --set '*.cache-from=type=gha' --set '*.cache-to=type=gha,mode=max'
+
+      - name: Start the rig and configure
+        run: dev/ha-up.sh --no-build --os rocky9
+
+      - name: Install
+        run: dev/ha-exec.sh ./install
+
+      - name: Health checks
+        run: dev/ha-exec.sh ./verify
+
+      - name: Drills — failover, restore from both repositories, session across a rolling restart, test alert
+        run: dev/ha-exec.sh ./verify --drill all
+
+      - name: Run install a second time
+        run: dev/ha-exec.sh ./install
+
+      - name: Collect node logs
+        if: always()
+        run: dev/ha-logs.sh .dev/containers/artifacts
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ha-smoke-rocky9-logs
           path: .dev/containers/artifacts
           retention-days: 14
           if-no-files-found: ignore
