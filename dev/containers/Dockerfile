@@ -61,9 +61,14 @@ RUN dnf -y install --setopt=install_weak_deps=False \
 RUN systemctl mask chronyd.service \
  && systemctl enable sshd.service \
  && rm -f /etc/ssh/ssh_host_*
+# useradd leaves the account locked ("!!"), which sshd on this family
+# refuses even for key logins; cloud-init unlocks it the same way ("*").
+# pam_loginuid cannot write the audit login uid in a container.
 RUN useradd -m -s /bin/bash rocky \
+ && usermod -p '*' rocky \
  && echo 'rocky ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-rocky \
- && chmod 440 /etc/sudoers.d/90-rocky
+ && chmod 440 /etc/sudoers.d/90-rocky \
+ && sed -i 's/^session\s\+required\s\+pam_loginuid.so/session optional pam_loginuid.so/' /etc/pam.d/sshd
 RUN : > /etc/machine-id
 STOPSIGNAL SIGRTMIN+3
 CMD ["/usr/sbin/init"]
