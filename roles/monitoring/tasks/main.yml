@@ -128,6 +128,7 @@
   when: inventory_hostname == monitoring_host
   block:
     - name: Add Grafana repository
+      when: keelinfra_offline_dir | default('') | length == 0
       ansible.builtin.deb822_repository:
         name: grafana
         types: deb
@@ -140,7 +141,7 @@
       ansible.builtin.apt:
         name: grafana
         state: present
-        update_cache: true
+        update_cache: "{{ keelinfra_offline_dir | default('') | length == 0 }}"
 
     - name: Set Grafana admin password
       community.general.ini_file:

@@ -32,6 +32,10 @@ alerting:
     username: "{{ cfg.alerting.email.username | default('') }}"
 {% endif %}
 {% endif %}
+{% if offline_dir | default('') | length > 0 %}
+# Offline mode: packages and release artifacts come from this bundle (./configure --offline).
+keelinfra_offline_dir: "{{ offline_dir }}"
+{% endif %}
 cluster_nodes:
 {% for node in cfg.nodes %}
   - name: {{ node.name }}

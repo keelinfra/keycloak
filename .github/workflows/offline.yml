@@ -1,0 +1,126 @@
+---
+name: offline
+# Air-gapped install and upgrade on the container rig: build offline bundles
+# (bundle/build.sh), cut the three nodes off from the internet, then
+# ./configure --offline, ./install, every drill, and a rolling
+# ./upgrade --offline onto the next patch release. Fails when a role
+# installs or downloads something the bundle does not carry.
+on:
+  push:
+    branches: [main]
+    paths:
+      - bundle/**
+      - roles/**
+      - playbooks/**
+      - configure
+      - upgrade
+      - requirements.yml
+      - dev/containers/**
+      - dev/ha-*.sh
+      - .github/workflows/offline.yml
+  pull_request:
+    paths:
+      - bundle/**
+      - roles/**
+      - playbooks/**
+      - configure
+      - upgrade
+      - requirements.yml
+      - dev/containers/**
+      - dev/ha-*.sh
+      - .github/workflows/offline.yml
+  schedule:
+    # weekly: a new package in Ubuntu, PGDG or Grafana can change the tree
+    - cron: "40 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offline-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FROM: "26.8.0"
+  TO: "26.8.1"
+
+jobs:
+  air-gapped:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+      - uses: crazy-max/ghaction-github-runtime@v4
+
+      - name: Build rig images
+        working-directory: dev/containers
+        run: |
+          docker buildx bake -f compose.yml --load --allow "fs.read=$(cd ../.. && pwd)" \
+            --set '*.cache-from=type=gha' --set '*.cache-to=type=gha,mode=max'
+
+      - name: Build offline bundles for ${{ env.FROM }} and ${{ env.TO }}
+        run: |
+          bundle/build.sh --version "$FROM" --out .dev/bundle
+          bundle/build.sh --version "$TO" --out .dev/bundle
+          ls -la .dev/bundle
+
+      - name: Start the rig offline and configure from the ${{ env.FROM }} bundle
+        run: |
+          dev/ha-up.sh --no-build --version "$FROM" \
+            --offline ".dev/bundle/keelinfra-keycloak-offline-$FROM-ubuntu24.04-amd64.tar.gz"
+
+      - name: Install
+        run: dev/ha-exec.sh ./install
+
+      - name: Health checks and drills
+        run: |
+          dev/ha-exec.sh ./verify
+          dev/ha-exec.sh ./verify --drill all
+
+      - name: Upgrade without the target bundle must stop before touching the cluster
+        run: |
+          if dev/ha-exec.sh ./upgrade --to "$TO" > /tmp/no-bundle.log 2>&1; then
+            cat /tmp/no-bundle.log; echo "upgrade ran without a bundle for $TO"; exit 1
+          fi
+          cat /tmp/no-bundle.log
+          grep -q "has no keycloak-$TO.tar.gz" /tmp/no-bundle.log
+
+      - name: Upgrade to ${{ env.TO }} from its bundle
+        run: |
+          dev/ha-exec.sh ./upgrade --to "$TO" \
+            --offline "/work/.dev/bundle/keelinfra-keycloak-offline-$TO-ubuntu24.04-amd64.tar.gz"
+          dev/ha-exec.sh ./verify
+
+      - name: The nodes stayed offline
+        run: |
+          for node in kc-node1 kc-node2 kc-node3; do
+            if docker exec "$node" curl -fsS -m 5 -o /dev/null https://github.com; then
+              echo "$node reached the internet"; exit 1
+            fi
+          done
+
+      - name: Bundle size
+        if: always()
+        run: |
+          ls -la .dev/bundle || true
+          echo "### Offline bundles" >> "$GITHUB_STEP_SUMMARY"
+          (cd .dev/bundle 2>/dev/null && du -h ./*.tar.gz) >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Collect node logs
+        if: always()
+        run: dev/ha-logs.sh .dev/containers/artifacts
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: offline-logs
+          path: .dev/containers/artifacts
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: dev/ha-down.sh

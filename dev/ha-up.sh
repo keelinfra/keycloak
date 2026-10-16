@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Bring up the 3-node container rig and configure the repo against it.
-# Usage: dev/ha-up.sh [--version 26.8.1] [--no-build] [--force]
+# Usage: dev/ha-up.sh [--version 26.8.1] [--no-build] [--force] [--offline <bundle.tar.gz>]
+# --offline cuts the nodes off from the internet and configures from a bundle
+# (bundle/build.sh); the bundle must sit inside the repo, which the control
+# container sees as /work.
 # Then:  dev/ha-exec.sh ./install && dev/ha-exec.sh ./verify --drill all
 # Down:  dev/ha-down.sh            Details: dev/containers/README.md
 set -euo pipefail
@@ -8,19 +11,26 @@ set -euo pipefail
 source "$(dirname "$0")/containers/lib.sh"
 cd "$HA_ROOT"
 
-VERSION="26.8.1" BUILD=1 FORCE=0
+VERSION="26.8.1" BUILD=1 FORCE=0 OFFLINE=""
 [[ "${HA_SKIP_BUILD:-0}" == "1" ]] && BUILD=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)  VERSION="$2"; shift 2 ;;
     --no-build) BUILD=0; shift ;;
     --force)    FORCE=1; shift ;;
-    -h|--help)  sed -n '2,5p' "$0"; exit 0 ;;
+    --offline)  OFFLINE="$2"; shift 2 ;;
+    -h|--help)  sed -n '2,8p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 [[ "$VERSION" =~ ^26\.[0-9]+\.[0-9]+$ ]] || { echo "error: --version must look like 26.x.y" >&2; exit 1; }
 ha_require_docker
+if [[ -n "$OFFLINE" ]]; then
+  [[ -f "$OFFLINE" ]] || { echo "error: offline bundle not found: $OFFLINE" >&2; exit 1; }
+  OFFLINE_ABS="$(cd "$(dirname "$OFFLINE")" && pwd)/$(basename "$OFFLINE")"
+  [[ "$OFFLINE_ABS" == "$HA_ROOT"/* ]] || { echo "error: the bundle must be inside the repo ($HA_ROOT)" >&2; exit 1; }
+  OFFLINE_WORK="/work/${OFFLINE_ABS#"$HA_ROOT"/}"
+fi
 command -v ssh-keygen >/dev/null || { echo "error: ssh-keygen not found (install the OpenSSH client)" >&2; exit 1; }
 
 # inventory/ is rendered for one cluster at a time. Do not overwrite one that
@@ -94,13 +104,28 @@ echo "Cluster definition written to .dev/containers/cluster.yml:"
 cat "$HA_STATE_DIR/cluster.yml"
 echo
 
+if [[ -n "$OFFLINE" ]]; then
+  ha_group "Cut the nodes off from the internet"
+  # The nodes keep their rig subnet (each other, the control container) and
+  # lose the default route: nothing outside the rig is reachable. A
+  # container restart brings the route back.
+  for node in "${HA_NODES[@]}"; do
+    ha_compose exec -T "$node" sh -c 'ip route del default 2>/dev/null || true'
+    if ha_compose exec -T "$node" curl -fsS -m 5 -o /dev/null https://github.com 2>/dev/null; then
+      echo "error: $node still reaches the internet" >&2; exit 1
+    fi
+    echo "$node: offline"
+  done
+  ha_endgroup
+fi
+
 # Nodes get fresh host keys whenever they are recreated; forget the old ones.
 ha_control sh -c 'rm -f /root/.ssh/known_hosts'
 
 ha_group "Configure"
 # The stand-in bucket accepts any credentials.
 ha_compose exec -T -w /work -e KEELINFRA_S3_ACCESS_KEY=rig -e KEELINFRA_S3_SECRET_KEY=rig-secret \
-  control ./configure -c .dev/containers/cluster.yml
+  control ./configure -c .dev/containers/cluster.yml ${OFFLINE:+--offline "$OFFLINE_WORK"}
 ha_endgroup
 echo
 echo "✓ rig is up. Next: dev/ha-exec.sh ./install"

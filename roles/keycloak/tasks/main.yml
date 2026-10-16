@@ -3,7 +3,7 @@
   ansible.builtin.apt:
     name: openjdk-21-jre-headless
     state: present
-    update_cache: true
+    update_cache: "{{ keelinfra_offline_dir | default('') | length == 0 }}"
 
 - name: Create keycloak user
   ansible.builtin.user:

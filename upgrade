@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 # keelinfra/keycloak — upgrade: move the cluster to a new Keycloak version.
-# Usage: ./upgrade --to 26.6.2 [--force] [--dist-url <url>]
+# Usage: ./upgrade --to 26.6.2 [--force] [--dist-url <url>] [--offline <bundle.tar.gz>]
 # --dist-url installs the target from a non-upstream tarball, e.g. a keelinfra
 # LTS build published at github.com/keelinfra/keycloak/releases (kc-*-keel* tags).
 set -euo pipefail
 cd "$(dirname "$0")"
 
-TARGET="" FORCE=false DIST_URL=""
+TARGET="" FORCE=false DIST_URL="" OFFLINE=""
+OFFLINE_DIR="$PWD/inventory/offline"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --to) TARGET="$2"; shift 2 ;;
     --force) FORCE=true; shift ;;
     --dist-url) DIST_URL="$2"; shift 2 ;;
-    -h|--help) echo "Usage: ./upgrade --to <version> [--force] [--dist-url <url>]"; exit 0 ;;
+    --offline) OFFLINE="$2"; shift 2 ;;
+    -h|--help) echo "Usage: ./upgrade --to <version> [--force] [--dist-url <url>] [--offline <bundle.tar.gz>]"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -22,6 +24,19 @@ export ANSIBLE_VAULT_PASSWORD_FILE="$PWD/inventory/.vault_pass"
 
 EXTRA=()
 [[ -n "$DIST_URL" ]] && EXTRA+=(-e "keycloak_dist_url=$DIST_URL")
+
+# Offline: the target version comes from a bundle built for it. Check it is
+# there before the playbook takes a backup and starts staging.
+[[ -n "$OFFLINE" ]] && bundle/unpack.sh "$OFFLINE" "$OFFLINE_DIR"
+if [[ -f "$OFFLINE_DIR/bundle.yml" ]]; then
+  KC_FILE="$(basename "${DIST_URL:-keycloak-$TARGET.tar.gz}")"
+  if [[ ! -f "$OFFLINE_DIR/dist/$KC_FILE" ]]; then
+    echo "error: this cluster installs offline, and the bundle in inventory/offline/ has no $KC_FILE." >&2
+    echo "       Build one (bundle/build.sh --version $TARGET) and pass it: ./upgrade --to $TARGET --offline <bundle>" >&2
+    exit 1
+  fi
+  EXTRA+=(-e "keelinfra_offline_dir=$OFFLINE_DIR")
+fi
 
 exec ansible-playbook playbooks/upgrade.yml \
   -e "keycloak_target_version=$TARGET" -e "upgrade_force=$FORCE" "${EXTRA[@]}"

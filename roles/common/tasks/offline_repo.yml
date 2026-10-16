@@ -1,0 +1,84 @@
+---
+# Offline mode: serve apt from the package repository in the bundle
+# (bundle/build.sh), unpacked on the control node by ./configure --offline.
+# Other configured sources are left alone, so a site with an internal
+# mirror keeps it; the bundle's repository is pinned above them, so the
+# versions it ships are the ones installed and nothing is fetched from a
+# source the node cannot reach.
+
+- name: Read the offline bundle manifest
+  ansible.builtin.set_fact:
+    offline_bundle: "{{ lookup('ansible.builtin.file', keelinfra_offline_dir ~ '/bundle.yml') | from_yaml }}"
+
+- name: Check the bundle matches this node
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == 'Ubuntu'
+      - ansible_distribution_release == offline_bundle.codename
+      - offline_bundle.arch == offline_arch_map[ansible_architecture] | default(ansible_architecture)
+    fail_msg: >-
+      The offline bundle is for {{ offline_bundle.os }} {{ offline_bundle.arch }};
+      {{ inventory_hostname }} runs {{ ansible_distribution }} {{ ansible_distribution_version }}
+      on {{ ansible_architecture }}. Build one for this node with bundle/build.sh --arch.
+    quiet: true
+
+- name: Read the installed repository's bundle id
+  ansible.builtin.slurp:
+    src: "{{ offline_repo_dir }}/.bundle-id"
+  register: offline_repo_id
+  failed_when: false
+
+- name: Install the bundle's package repository
+  when: (offline_repo_id.content | default('') | b64decode | trim) != offline_bundle.repo_id
+  block:
+    - name: Remove a repository from an earlier bundle
+      ansible.builtin.file:
+        path: "{{ offline_repo_dir }}"
+        state: absent
+
+    - name: Create the repository directory
+      ansible.builtin.file:
+        path: "{{ offline_repo_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Unpack the repository
+      ansible.builtin.unarchive:
+        src: "{{ keelinfra_offline_dir }}/repo.tar"
+        dest: "{{ offline_repo_dir }}"
+
+    - name: Record the bundle id
+      ansible.builtin.copy:
+        content: "{{ offline_bundle.repo_id }}\n"
+        dest: "{{ offline_repo_dir }}/.bundle-id"
+        mode: "0644"
+
+- name: Add the repository as an apt source
+  ansible.builtin.copy:
+    content: |
+      # keelinfra offline bundle ({{ offline_bundle.keycloak_version }}, built {{ offline_bundle.built }})
+      deb [trusted=yes] file:{{ offline_repo_dir }} ./
+    dest: /etc/apt/sources.list.d/keelinfra-offline.list
+    mode: "0644"
+
+# 990: preferred over every other source (500), but below 1000, so apt
+# never downgrades a package the node already has at a newer version.
+- name: Prefer the repository over other sources
+  ansible.builtin.copy:
+    content: |
+      Package: *
+      Pin: release o=keelinfra-offline
+      Pin-Priority: 990
+    dest: /etc/apt/preferences.d/keelinfra-offline
+    mode: "0644"
+
+# Refresh only this source: the others may be unreachable, and an update
+# that tries them fails or hangs. The apt module cannot limit the sources.
+- name: Refresh the package index from the repository  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    cmd: >-
+      apt-get update
+      -o Dir::Etc::sourcelist=sources.list.d/keelinfra-offline.list
+      -o Dir::Etc::sourceparts=-
+      -o APT::Get::List-Cleanup=0
+  changed_when: false

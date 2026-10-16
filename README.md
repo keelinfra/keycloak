@@ -43,12 +43,15 @@ cd keycloak
 
 Single machine instead? Use `examples/single-node.yml` — same flow, no HA.
 
+No internet on the nodes? Build an [offline bundle](bundle/README.md) on a machine that has it, then `./configure -c <cluster.yml> --offline <bundle.tar.gz>` — packages, Keycloak and every other artifact come from the bundle, and CI proves it on nodes with no route out.
+
 Then open `https://<your-host>/admin` and you're done. Before production, read the [deployment guide](DEPLOYMENT.md): network, backups off the cluster, alert routing. Full docs: https://keelinfra.io/docs/keycloak/
 
 ## Requirements
 
 - 1 or 3 Linux nodes running Ubuntu 24.04 (tested in CI); Ubuntu 22.04 and Debian 12 are untested, and RHEL/Rocky are not supported yet (the roles install packages with apt)
 - SSH access with passwordless sudo
+- Internet access from the nodes, or an [offline bundle](bundle/README.md)
 - That's it — Ansible runs from the control node, nothing is pre-installed on targets
 
 ## Don't take our word for it
@@ -75,7 +78,7 @@ Supported paths are listed in [UPGRADES.md](UPGRADES.md) and re-verified nightly
 
 ## Subscription
 
-The distribution is free and open source. A yearly subscription adds [CVE tracking](CVE-POLICY.md), upgrade runbooks, and direct access to the people who build it; offline bundles join it when they ship. Standard is $4,500 per production cluster per year (up to 3 Keycloak nodes), Enterprise from $12,000 — not per user. → https://keelinfra.io/keycloak/pricing/
+The distribution is free and open source. A yearly subscription adds [CVE tracking](CVE-POLICY.md), upgrade runbooks, and direct access to the people who build it; prebuilt offline bundles for each release join it when they ship (anyone can build one today with `bundle/build.sh`). Standard is $4,500 per production cluster per year (up to 3 Keycloak nodes), Enterprise from $12,000 — not per user. → https://keelinfra.io/keycloak/pricing/
 
 CVE tracking means notification, impact analysis against your configuration, and help upgrading along a drilled path — **not** backported patches. [CVE-POLICY.md](CVE-POLICY.md) states the boundary, and works through what "20 CVEs" actually meant for two recent releases.
 
