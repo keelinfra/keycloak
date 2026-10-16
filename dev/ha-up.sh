@@ -132,8 +132,15 @@ ha_control sh -c 'rm -f /root/.ssh/known_hosts'
 
 ha_group "Configure"
 # The stand-in bucket accepts any credentials.
-ha_compose exec -T -w /work -e KEELINFRA_S3_ACCESS_KEY=rig -e KEELINFRA_S3_SECRET_KEY=rig-secret \
-  control ./configure -c .dev/containers/cluster.yml ${OFFLINE:+--offline "$OFFLINE_WORK"}
+if ! ha_compose exec -T -w /work -e KEELINFRA_S3_ACCESS_KEY=rig -e KEELINFRA_S3_SECRET_KEY=rig-secret \
+  control ./configure -c .dev/containers/cluster.yml ${OFFLINE:+--offline "$OFFLINE_WORK"}; then
+  # Most rig failures here are ssh logins the nodes refused; show why.
+  for node in "${HA_NODES[@]}"; do
+    echo "--- $node: sshd log"
+    ha_compose exec -T "$node" journalctl --no-pager -n 25 -u ssh -u sshd || true
+  done
+  exit 1
+fi
 ha_endgroup
 echo
 echo "✓ rig is up. Next: dev/ha-exec.sh ./install"
