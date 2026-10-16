@@ -63,12 +63,17 @@ RUN systemctl mask chronyd.service \
  && rm -f /etc/ssh/ssh_host_*
 # useradd leaves the account locked ("!!"), which sshd on this family
 # refuses even for key logins; cloud-init unlocks it the same way ("*").
-# pam_loginuid cannot write the audit login uid in a container.
+# pam_loginuid cannot write the audit login uid in a container, and
+# pam_unix's account check cannot read /etc/shadow through its helper here
+# ("could not obtain user info"); broken_shadow skips that read. Rig only.
 RUN useradd -m -s /bin/bash rocky \
  && usermod -p '*' rocky \
  && echo 'rocky ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/90-rocky \
  && chmod 440 /etc/sudoers.d/90-rocky \
- && sed -i 's/^session\s\+required\s\+pam_loginuid.so/session optional pam_loginuid.so/' /etc/pam.d/sshd
+ && sed -i 's/^session\s\+required\s\+pam_loginuid.so/session optional pam_loginuid.so/' /etc/pam.d/sshd \
+ && for f in /etc/pam.d/password-auth /etc/pam.d/system-auth; do \
+      sed -i 's/^\(account\s\+required\s\+pam_unix.so\)\(.*\)$/\1\2 broken_shadow/' "$(readlink -f "$f")"; \
+    done
 RUN : > /etc/machine-id
 STOPSIGNAL SIGRTMIN+3
 CMD ["/usr/sbin/init"]
