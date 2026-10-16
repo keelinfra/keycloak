@@ -53,8 +53,11 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
           sudo apt-get update -q
+          # dnsmasq-base serves DHCP on the libvirt network and ipxe-qemu the
+          # virtio NIC's option ROM; both are only recommends.
           sudo apt-get install -y -q --no-install-recommends \
-            qemu-system-x86 qemu-utils libvirt-daemon-system virtinst cloud-image-utils
+            qemu-system-x86 qemu-utils libvirt-daemon-system virtinst cloud-image-utils \
+            dnsmasq-base ipxe-qemu
           sudo systemctl start libvirtd
 
       - uses: docker/setup-buildx-action@v4
