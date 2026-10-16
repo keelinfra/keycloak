@@ -36,7 +36,7 @@ then:
 ```
 
 `./configure --offline` checks the bundle against its checksums, unpacks it
-into `inventory/offline/`, installs the Ansible collections from it, and
+into `inventory/offline/`, installs the Ansible collections from it (`ansible-galaxy collection install --offline`), and
 records offline mode in the inventory. The control node needs `ansible-core`
 2.14 or newer already installed (from your OS packages or an internal pip
 mirror); nothing else.

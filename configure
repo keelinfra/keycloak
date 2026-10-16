@@ -38,7 +38,9 @@ elif [[ -f "$OFFLINE_DIR/bundle.yml" ]]; then
 fi
 
 if [[ -f "$OFFLINE_DIR/bundle.yml" ]]; then
-  ansible-galaxy collection install --offline -r "$OFFLINE_DIR/collections/requirements.yml" >/dev/null
+  # The tarballs themselves: the requirements.yml that `collection download`
+  # writes names them relative to its own directory, which -r does not honour.
+  ansible-galaxy collection install --offline "$OFFLINE_DIR"/collections/*.tar.gz >/dev/null
   EXTRA=(-e "offline_dir=$OFFLINE_DIR")
 else
   ansible-galaxy collection install -r requirements.yml >/dev/null
