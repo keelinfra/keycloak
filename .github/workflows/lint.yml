@@ -22,4 +22,4 @@ jobs:
       - name: ansible-lint
         run: ansible-lint
       - name: shellcheck
-        run: shellcheck configure install upgrade verify dev/*.sh dev/containers/*.sh bundle/*.sh
+        run: shellcheck configure install preflight upgrade verify dev/*.sh dev/containers/*.sh bundle/*.sh

@@ -38,10 +38,13 @@ keelinfra is the third option: a distribution you run yourself, with a subscript
 git clone https://github.com/keelinfra/keycloak
 cd keycloak
 ./configure -c examples/ha-3node.yml   # describe your nodes
+./preflight                            # check them; changes nothing
 ./install                              # ~10 minutes on 3 clean VMs
 ```
 
-Single machine instead? Use `examples/single-node.yml` — same flow, no HA.
+Single machine instead? Use `examples/single-node.yml` — same flow, no HA. Going to production? Start from `examples/production.yml`: VIP, your own certificate, off-site backups and alert routing all switched on.
+
+`./preflight` looks at every node before anything is installed and lists everything that is wrong in one report: an unsupported OS, too little memory or disk, a port another program already holds, a host address that is not on the node, nodes that cannot reach each other, download sources the nodes cannot reach, a host firewall, and a VIP that is off the nodes' network or already taken. `./install` runs the same checks first and stops before changing anything if one fails.
 
 No internet on the nodes? Build an [offline bundle](bundle/README.md) on a machine that has it, then `./configure -c <cluster.yml> --offline <bundle.tar.gz>` — packages, Keycloak and every other artifact come from the bundle, and CI proves it on nodes with no route out.
 

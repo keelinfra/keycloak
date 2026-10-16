@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# keelinfra/keycloak — preflight: check the nodes before installing on them.
+# Usage: ./preflight
+# Changes nothing. ./install runs the same checks first.
+set -euo pipefail
+cd "$(dirname "$0")"
+[[ -f inventory/hosts.yml ]] || { echo "error: no inventory found — run ./configure first" >&2; exit 1; }
+export ANSIBLE_VAULT_PASSWORD_FILE="$PWD/inventory/.vault_pass"
+exec ansible-playbook playbooks/preflight.yml "$@"

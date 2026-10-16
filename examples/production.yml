@@ -1,0 +1,56 @@
+---
+# keelinfra/keycloak cluster definition: production template
+# The same shape as ha-3node.yml with every production setting switched on:
+# a VIP, your own certificate, an off-site backup copy and alert routing.
+# Replace each example value, then:
+#   KEELINFRA_S3_ACCESS_KEY=... KEELINFRA_S3_SECRET_KEY=... ./configure -c cluster.yml
+#   ./preflight      # checks the nodes, changes nothing
+#   ./install
+# Before go-live, run every drill: ./verify --drill all
+
+cluster_name: keycloak-prod
+
+# Three nodes on one network segment (the VIP needs it), each with 4 GB of
+# memory or more, 2 CPUs and 20 GB free under /var. Use the addresses the
+# nodes reach each other on: services bind to them.
+nodes:
+  - host: 10.0.0.11
+    name: kc-node1      # also runs Prometheus, Grafana and the local backup repository
+  - host: 10.0.0.12
+    name: kc-node2
+  - host: 10.0.0.13
+    name: kc-node3
+
+ssh_user: ubuntu        # rocky on Rocky Linux cloud images, ec2-user on RHEL
+# ssh_private_key: ~/.ssh/id_ed25519
+
+domain: sso.example.com
+# A free address on the nodes' network; point DNS for the domain at it.
+# ./preflight checks it is on the right network and nobody answers on it.
+vip: "10.0.0.10"
+
+keycloak_version: "26.8.1"
+
+# Your certificate for the domain. ./configure checks it is not expired,
+# lists the domain and matches the key. Paths are relative to this file.
+tls_mode: custom
+tls_cert_file: tls/sso.example.com.crt   # PEM: server certificate, then intermediates
+tls_key_file: tls/sso.example.com.key    # PEM private key, no passphrase
+# tls_ca_file: tls/internal-ca.crt       # private CA to trust on the nodes
+
+# Encrypted copy of every backup outside the cluster. Credentials come from
+# the environment on ./configure, never from this file.
+backup_s3:
+  endpoint: s3.eu-central-1.amazonaws.com
+  region: eu-central-1
+  bucket: acme-keycloak-backups
+  uri_style: host       # "path" for most self-hosted stores
+  # ca_file: tls/s3-ca.crt
+
+# Somebody has to hear the alerts. Test with ./verify --drill alert.
+alerting:
+  webhook_url: https://hooks.example.com/keycloak
+  # email:
+  #   to: oncall@example.com
+  #   from: keycloak-alerts@example.com
+  #   smarthost: smtp.example.com:587
