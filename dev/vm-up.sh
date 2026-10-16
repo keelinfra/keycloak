@@ -39,10 +39,14 @@ done
 case "$OS" in
   rocky9)
     IMAGE_URL=https://dl.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud-Base.latest.x86_64.qcow2
-    SSH_USER=rocky ;;
+    SSH_USER=rocky
+    # Under SeaBIOS the image never reaches its bootloader (no serial output,
+    # no DHCP request); it boots with UEFI firmware (OVMF).
+    BOOT=(--boot uefi) ;;
   ubuntu24.04)
     IMAGE_URL=https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
-    SSH_USER=ubuntu ;;
+    SSH_USER=ubuntu
+    BOOT=() ;;
   *) echo "error: --os must be rocky9 or ubuntu24.04" >&2; exit 1 ;;
 esac
 [[ "$VERSION" =~ ^26\.[0-9]+\.[0-9]+$ ]] || { echo "error: --version must look like 26.x.y" >&2; exit 1; }
@@ -119,7 +123,7 @@ CLOUD
     --network "network=$NET,mac=52:54:00:6b:00:1$i,model=virtio" \
     --osinfo detect=on,require=off --graphics none \
     --serial "file,path=$DISKS/$node-console.log" \
-    --noautoconsole
+    "${BOOT[@]}" --noautoconsole
 done
 for i in 1 2 3; do
   node="${NODES[$((i - 1))]}" ip="$PREFIX.1$i"
@@ -132,7 +136,9 @@ for i in 1 2 3; do
     if [[ "$attempt" == 90 ]]; then
       echo "error: $node did not come up. DHCP leases and the end of its serial console:" >&2
       virsh net-dhcp-leases "$NET" >&2 || true
-      tail -n 80 "$DISKS/$node-console.log" >&2 || true
+      virsh domstate --reason "$node" >&2 || true
+      if [[ -s "$DISKS/$node-console.log" ]]; then tail -n 80 "$DISKS/$node-console.log" >&2
+      else echo "(the serial console is empty: the firmware never handed over to the bootloader)" >&2; fi
       exit 1
     fi
     sleep 5
