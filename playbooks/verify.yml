@@ -2,6 +2,7 @@
 # keelinfra/keycloak — health checks and operational drills.
 # ./verify                     → health only
 # ./verify --drill failover    → Patroni switchover + write test
+# ./verify --drill db-kill     → kill -9 the PostgreSQL leader under login load
 # ./verify --drill restore     → pgBackRest restore to a scratch directory
 # ./verify --drill session     → login, rolling restart, session must survive
 # ./verify --drill alert       → send a test alert to the configured receivers
@@ -289,6 +290,275 @@
         - name: Failover drill passed
           ansible.builtin.debug:
             msg: "✓ switchover {{ current_leader }} → {{ switch_target }} complete, writes OK through haproxy"
+
+- name: Database kill drill
+  # The switchover above is the planned case: Patroni demotes the leader
+  # cleanly and hands the leader key over. This is the unplanned one — the
+  # leader's Patroni and PostgreSQL die with SIGKILL, nothing is handed over,
+  # and the replicas must wait out the leader key's TTL before one promotes.
+  # What it proves is about Keycloak, not Patroni: that every Keycloak node
+  # serves logins again on its own once a new leader is up, with no restart,
+  # no stuck connection pool and no lost session (upstream #24493, #42224,
+  # #49515, #53452 are the failure modes it would catch).
+  hosts: primary
+  gather_facts: false
+  vars:
+    kc_token_url: "https://127.0.0.1:{{ haproxy_https_port }}/realms/demo/protocol/openid-connect/token"
+    login_form: "grant_type=password&client_id=keelinfra-drill&username=demo&password=demo12345&scope=openid"
+    probe_log: /var/tmp/keelinfra-db-kill-probe.log
+    # Seconds of logins after the kill. Must cover the leader key's TTL
+    # (Patroni ttl, 30 s), the promotion, HAProxy marking the new leader up
+    # and a stretch of steady state after that.
+    db_kill_probe_seconds: 150
+    # Fail when logins are not answering 200 again within this many seconds
+    # of the kill. The expected window is TTL + loop_wait + HAProxy rise.
+    db_kill_max_recovery: 90
+  tasks:
+    - name: Run database kill drill
+      when: drill | default('health') in ['db-kill', 'all']
+      block:
+        - name: Read the Patroni cluster
+          ansible.builtin.command:
+            cmd: patronictl -c /etc/patroni/config.yml list -f json
+          register: kill_state
+          changed_when: false
+
+        - name: Pick the leader to kill
+          ansible.builtin.set_fact:
+            kill_leader: >-
+              {{ (kill_state.stdout | from_json)
+                 | selectattr('Role', 'equalto', 'Leader')
+                 | map(attribute='Member') | first }}
+            kill_replicas: >-
+              {{ (kill_state.stdout | from_json)
+                 | selectattr('Role', 'in', ['Replica', 'Sync Standby'])
+                 | selectattr('State', 'equalto', 'streaming')
+                 | map(attribute='Member') | list }}
+
+        - name: Killing the leader needs a streaming replica to take over
+          ansible.builtin.assert:
+            that: kill_replicas | length > 0
+            fail_msg: >-
+              No replica is streaming from {{ kill_leader }}. The db-kill drill
+              needs at least two Patroni members; it cannot run on a single node.
+              Cluster state: {{ kill_state.stdout }}
+
+        - name: Open a session before the kill
+          ansible.builtin.uri:
+            url: "{{ kc_token_url }}"
+            method: POST
+            validate_certs: false
+            body_format: form-urlencoded
+            body:
+              grant_type: password
+              client_id: keelinfra-drill
+              username: demo
+              password: demo12345
+              scope: openid
+            status_code: 200
+          register: kill_login
+
+        - name: Wait until the replicas have replayed the session
+          # Replication is asynchronous: a write the leader acknowledged but
+          # no replica received dies with the leader. That is a property of
+          # async replication, not something this drill can fix, so the
+          # session under test is one the replicas already hold.
+          ansible.builtin.command:
+            cmd: patronictl -c /etc/patroni/config.yml list -f json
+          register: kill_lag
+          changed_when: false
+          until: >-
+            (kill_lag.stdout | from_json)
+            | selectattr('Member', 'in', kill_replicas)
+            | map(attribute='Lag in MB') | map('int') | max == 0
+          retries: 20
+          delay: 2
+
+        - name: Start logging one login per second through haproxy
+          # Each line: epoch, HTTP code, seconds taken. curl gives up after
+          # 10 s and records 000, so a hung pool shows as a run of 000s
+          # rather than as a probe that never returns.
+          ansible.builtin.shell: |
+            end=$(( $(date +%s) + {{ db_kill_probe_seconds }} ))
+            : > {{ probe_log }}
+            while [ "$(date +%s)" -lt "$end" ]; do
+              at=$(date +%s)
+              out=$(curl -sk -o /dev/null -w '%{http_code} %{time_total}' --max-time 10 \
+                -d '{{ login_form }}' {{ kc_token_url }} || true)
+              echo "$at ${out:-000 10}" >> {{ probe_log }}
+              sleep 1
+            done
+          args:
+            executable: /bin/bash
+          async: "{{ db_kill_probe_seconds + 60 }}"
+          poll: 0
+          register: kill_probe
+          changed_when: false
+
+        - name: Let the probe record a steady state first
+          ansible.builtin.wait_for:
+            timeout: 10
+
+        - name: Kill Patroni and PostgreSQL on the leader with SIGKILL
+          # systemctl kill signals every process in the unit's cgroup, so the
+          # postmaster and its backends die with Patroni. The stop that
+          # follows only cancels a restart; the leader key is not released.
+          ansible.builtin.shell: |
+            date +%s
+            systemctl kill --signal=SIGKILL patroni
+            systemctl stop patroni
+          args:
+            executable: /bin/bash
+          delegate_to: "{{ kill_leader }}"
+          register: kill_at
+          changed_when: true
+
+        - name: Wait for a replica to take the leader key
+          ansible.builtin.uri:
+            url: "http://{{ hostvars[kill_replicas | first].ansible_host }}:{{ patroni_rest_port }}/cluster"
+            return_content: true
+          register: kill_cluster
+          until: >-
+            kill_cluster.json is defined
+            and (kill_cluster.json.members
+                 | selectattr('role', 'equalto', 'leader')
+                 | selectattr('state', 'equalto', 'running')
+                 | map(attribute='name') | list | length == 1)
+            and (kill_cluster.json.members
+                 | selectattr('role', 'equalto', 'leader')
+                 | map(attribute='name') | first) != kill_leader
+          retries: 60
+          delay: 2
+
+        - name: Record the new leader
+          ansible.builtin.set_fact:
+            kill_new_leader: >-
+              {{ kill_cluster.json.members
+                 | selectattr('role', 'equalto', 'leader')
+                 | map(attribute='name') | first }}
+
+        - name: Wait for the probe to finish
+          ansible.builtin.async_status:
+            jid: "{{ kill_probe.ansible_job_id }}"
+          register: kill_probe_done
+          until: kill_probe_done.finished
+          retries: "{{ ((db_kill_probe_seconds + 60) / 5) | int }}"
+          delay: 5
+
+        - name: Read the probe log
+          ansible.builtin.command:
+            cmd: cat {{ probe_log }}
+          register: kill_probe_log
+          changed_when: false
+
+        - name: Work out the outage window
+          # recovered: seconds from the kill to the first login that is
+          # followed by nothing but 200s. Anything else after it is a relapse.
+          ansible.builtin.shell: |
+            killed={{ kill_at.stdout_lines[0] }}
+            awk -v killed="$killed" '
+              { at[NR] = $1; code[NR] = $2; took[NR] = $3; n = NR
+                if ($3 > slowest) slowest = $3 }
+              END {
+                last_bad = 0; bad = 0; before = 0; after = 0
+                for (i = 1; i <= n; i++) {
+                  if (at[i] < killed) { before++; continue }
+                  after++
+                  if (code[i] != 200) { bad++; last_bad = i; if (!first_bad) first_bad = i }
+                }
+                if (last_bad == n) { printf "recovered=never"; }
+                else if (last_bad) { printf "recovered=%d", at[last_bad + 1] - killed }
+                else { printf "recovered=0" }
+                printf " failed=%d after_kill=%d before_kill=%d slowest=%.1f", bad, after, before, slowest
+                if (first_bad) printf " outage=%d..%d", at[first_bad] - killed, at[last_bad] - killed
+                printf " steady_after=%d\n", (last_bad ? n - last_bad : after)
+              }' {{ probe_log }}
+          args:
+            executable: /bin/bash
+          register: kill_window
+          changed_when: false
+
+        - name: Parse the outage window
+          ansible.builtin.set_fact:
+            kill_result: >-
+              {{ dict(kill_window.stdout.split(' ') | map('split', '=') | list) }}
+
+        - name: Logins must come back on their own, and stay back
+          ansible.builtin.assert:
+            that:
+              - kill_result.before_kill | int >= 5
+              - kill_result.recovered != 'never'
+              - kill_result.recovered | int <= db_kill_max_recovery
+              - kill_result.steady_after | int >= 30
+            fail_msg: >-
+              After the PostgreSQL leader {{ kill_leader }} was killed, logins through
+              haproxy did not recover within {{ db_kill_max_recovery }} s and stay up
+              for 30 s. Probe summary: {{ kill_window.stdout }}. Full log on
+              {{ inventory_hostname }}:{{ probe_log }} (epoch, HTTP code, seconds).
+
+        - name: Every Keycloak node is ready and logs in on its own
+          # Through each node's own port, not the balancer: a node whose pool
+          # kept dead or read-only connections would hide behind the two that
+          # recovered (upstream #24493).
+          ansible.builtin.uri:
+            url: "https://{{ hostvars[item].ansible_host }}:{{ keycloak_https_port }}/realms/demo/protocol/openid-connect/token"
+            method: POST
+            validate_certs: false
+            body_format: form-urlencoded
+            body:
+              grant_type: password
+              client_id: keelinfra-drill
+              username: demo
+              password: demo12345
+              scope: openid
+            status_code: 200
+          loop: "{{ groups['keycloak'] }}"
+          register: kill_node_login
+          until: kill_node_login.status == 200
+          retries: 3
+          delay: 2
+
+        - name: The session opened before the kill still refreshes
+          ansible.builtin.uri:
+            url: "{{ kc_token_url }}"
+            method: POST
+            validate_certs: false
+            body_format: form-urlencoded
+            body:
+              grant_type: refresh_token
+              client_id: keelinfra-drill
+              refresh_token: "{{ kill_login.json.refresh_token }}"
+            status_code: 200
+
+        - name: Bring the killed member back
+          ansible.builtin.systemd:
+            name: patroni
+            state: started
+          delegate_to: "{{ kill_leader }}"
+
+        - name: The killed member rejoins as a streaming replica
+          ansible.builtin.command:
+            cmd: patronictl -c /etc/patroni/config.yml list -f json
+          register: kill_rejoin
+          changed_when: false
+          until: >-
+            (kill_rejoin.stdout | from_json)
+            | selectattr('Member', 'equalto', kill_leader)
+            | selectattr('State', 'equalto', 'streaming')
+            | list | length == 1
+          retries: 60
+          delay: 5
+
+        - name: Database kill drill passed
+          ansible.builtin.debug:
+            msg: >-
+              ✓ killed PostgreSQL leader {{ kill_leader }} (SIGKILL); {{ kill_new_leader }}
+              took over and logins through haproxy answered 200 again
+              {{ kill_result.recovered }} s after the kill
+              ({{ kill_result.failed }} of {{ kill_result.after_kill }} logins failed,
+              slowest {{ kill_result.slowest }} s); every Keycloak node logs in on its
+              own, the pre-kill session refreshes, and {{ kill_leader }} is streaming
+              again as a replica.
 
 - name: Restore drill
   hosts: backup_repo

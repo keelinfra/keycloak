@@ -4,8 +4,8 @@
 #   install FROM on three nodes, log in, probe every node's load balancer
 #   once a second while ./upgrade --to TO runs, read the probes, assert all
 #   three nodes run TO and every balancer sees every node UP, refresh the
-#   pre-upgrade session, then ./verify with the failover, restore and
-#   session drills. Leaves .dev/containers/receipt.md.
+#   pre-upgrade session, then ./verify with the failover, db-kill,
+#   restore and session drills. Leaves .dev/containers/receipt.md.
 #
 # Usage: dev/ha-drill.sh --from 26.7.3 --to 26.7.5 --strategy rolling
 #            [--from-dist-url URL] [--dist-url URL] [--max-window SECONDS]
@@ -225,6 +225,9 @@ ha_control ./verify
 phase_end
 phase_begin "./verify --drill failover"
 ha_control ./verify --drill failover
+phase_end
+phase_begin "./verify --drill db-kill"
+ha_control ./verify --drill db-kill
 phase_end
 phase_begin "./verify --drill restore"
 ha_control ./verify --drill restore

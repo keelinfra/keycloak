@@ -166,6 +166,8 @@ to run.
 ```bash
 ./verify                     # health of every component, backups, monitoring
 ./verify --drill failover    # switch the PostgreSQL leader to a replica, write through it
+./verify --drill db-kill     # kill -9 the PostgreSQL leader while logging in once a second;
+                             # every Keycloak node must serve logins again on its own
 ./verify --drill restore     # restore the latest backup of every repository to a scratch dir
 ./verify --drill session     # rolling restart of every Keycloak node; sessions must survive
 ./verify --drill alert       # send a test alert; every configured receiver must accept it
