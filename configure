@@ -62,4 +62,4 @@ ansible-playbook playbooks/configure.yml \
   -e "config_file=$(cd "$(dirname "$CONFIG")" && pwd)/$(basename "$CONFIG")" ${EXTRA[@]+"${EXTRA[@]}"}
 
 echo
-echo "✓ configured. Next: ./install"
+echo "✓ configured. Next: ./preflight to check the nodes, then ./install (it runs the same checks first)"

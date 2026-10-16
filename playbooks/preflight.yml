@@ -1,0 +1,318 @@
+---
+# Preflight: check the nodes before anything is installed on them, and say
+# everything that is wrong in one report instead of failing halfway through
+# an install. Changes nothing on the nodes. Runs at the start of ./install;
+# ./preflight runs it alone.
+
+- name: Preflight checks on every node
+  hosts: cluster
+  tags: [preflight]
+  gather_facts: true
+  vars:
+    # Below the minimum the install fails or the JVM is killed; below the
+    # recommendation it works but has no headroom for load or upgrades.
+    preflight_min_mem_mb: 1800
+    preflight_rec_mem_mb: 3800
+    preflight_min_disk_gb: 5
+    preflight_rec_disk_gb: 20
+    preflight_max_clock_skew_s: 10
+    preflight_ports:
+      - { port: 2379, what: etcd clients }
+      - { port: 2380, what: etcd peers }
+      - { port: "{{ postgres_port }}", what: PostgreSQL }
+      - { port: "{{ patroni_rest_port }}", what: Patroni REST API }
+      - { port: "{{ haproxy_pg_port }}", what: HAProxy to the PostgreSQL leader }
+      - { port: "{{ haproxy_https_port }}", what: HTTPS entrypoint }
+      - { port: 8404, what: HAProxy stats }
+      - { port: "{{ keycloak_https_port }}", what: Keycloak HTTPS }
+      - { port: "{{ keycloak_mgmt_port }}", what: Keycloak management }
+      - { port: 7800, what: Keycloak cluster (JGroups) }
+      - { port: 57800, what: Keycloak failure detection (JGroups) }
+      - { port: 9090, what: Prometheus }
+      - { port: 9093, what: Alertmanager }
+      - { port: 3000, what: Grafana }
+      - { port: 9100, what: node exporter }
+      - { port: 9187, what: PostgreSQL exporter }
+    # Process names (as ss prints them, 15 characters at most) of the
+    # components this distribution runs: a port held by one of them is a
+    # re-run, not a conflict.
+    preflight_own_processes: '^(etcd|postgres.*|patroni|python3.*|haproxy|java|prometheus.*|alertmanager|grafana.*|node_exporter)$'
+    preflight_online_hosts:
+      Debian: [https://github.com, https://apt.postgresql.org, https://apt.grafana.com]
+      RedHat: [https://github.com, https://download.postgresql.org, https://rpm.grafana.com, https://mirrors.fedoraproject.org]
+    offline: "{{ keelinfra_offline_dir | default('') | length > 0 }}"
+  tasks:
+    - name: Start the report
+      ansible.builtin.set_fact:
+        pf_fail: []
+        pf_warn: []
+        pf_info: []
+
+    - name: Check the operating system
+      ansible.builtin.set_fact:
+        pf_fail: >-
+          {{ pf_fail + ['runs ' ~ ansible_distribution ~ ' ' ~ ansible_distribution_version
+             ~ '; supported: Ubuntu 24.04, RHEL / Rocky Linux / AlmaLinux 9'] }}
+      when: >-
+        not (ansible_os_family == 'Debian'
+             or (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9'
+                 and ansible_distribution in ['RedHat', 'Rocky', 'AlmaLinux']))
+
+    - name: Note an untested distribution
+      ansible.builtin.set_fact:
+        pf_warn: >-
+          {{ pf_warn + [ansible_distribution ~ ' ' ~ ansible_distribution_version
+             ~ ' takes a supported path but is not tested in CI (Ubuntu 24.04 and Rocky Linux 9 are)'] }}
+      when: >-
+        (ansible_os_family == 'Debian' and not (ansible_distribution == 'Ubuntu' and ansible_distribution_version == '24.04'))
+        or (ansible_os_family == 'RedHat' and ansible_distribution in ['RedHat', 'AlmaLinux'])
+
+    - name: Check the CPU architecture
+      ansible.builtin.set_fact:
+        pf_fail: "{{ pf_fail + [ansible_architecture ~ ' CPU; supported: x86_64 and aarch64'] }}"
+      when: ansible_architecture not in ['x86_64', 'aarch64']
+
+    - name: Check memory and CPUs
+      ansible.builtin.set_fact:
+        pf_fail: >-
+          {{ pf_fail + ([ansible_memtotal_mb ~ ' MB of memory; at least ' ~ preflight_min_mem_mb ~ ' MB is needed']
+                        if ansible_memtotal_mb < preflight_min_mem_mb else []) }}
+        pf_warn: >-
+          {{ pf_warn
+             + ([ansible_memtotal_mb ~ ' MB of memory; ' ~ preflight_rec_mem_mb ~ ' MB or more is recommended']
+                if preflight_min_mem_mb <= ansible_memtotal_mb < preflight_rec_mem_mb else [])
+             + (['1 CPU; 2 or more are recommended'] if ansible_processor_vcpus | default(1) < 2 else []) }}
+
+    # Packages, Keycloak and the PostgreSQL data all land under /var/lib, /opt and /usr.
+    - name: Check free disk space
+      vars:
+        mount: >-
+          {{ ansible_mounts | selectattr('mount', 'in', ['/', '/var', '/var/lib'])
+             | sort(attribute='mount') | last | default({}) }}
+        free_gb: "{{ ((mount.size_available | default(0)) / 1024 / 1024 / 1024) | round(1) }}"
+      ansible.builtin.set_fact:
+        pf_fail: >-
+          {{ pf_fail + ([free_gb ~ ' GB free on ' ~ mount.mount ~ '; at least ' ~ preflight_min_disk_gb ~ ' GB is needed']
+                        if free_gb | float < preflight_min_disk_gb else []) }}
+        pf_warn: >-
+          {{ pf_warn + ([free_gb ~ ' GB free on ' ~ mount.mount ~ '; ' ~ preflight_rec_disk_gb
+                         ~ ' GB or more is recommended for the database, WAL and local backups']
+                        if preflight_min_disk_gb <= free_gb | float < preflight_rec_disk_gb else []) }}
+      when: mount.mount is defined
+
+    # etcd, Patroni, JGroups and HAProxy bind to the host given in the cluster
+    # definition. A public or NAT address that is not on an interface makes
+    # them fail to start.
+    - name: Check the node owns its address
+      ansible.builtin.set_fact:
+        pf_fail: >-
+          {{ pf_fail + [ansible_host ~ ' (the host in the cluster definition) is not an address of this node ('
+             ~ (ansible_all_ipv4_addresses | join(', ')) ~ '); use the address the other nodes reach it on'] }}
+      when:
+        - ansible_all_ipv4_addresses | default([]) | length > 0
+        - ansible_host not in ansible_all_ipv4_addresses
+        - ansible_host is not match('^127\.')
+
+    - name: List listening ports
+      ansible.builtin.command: ss -Htlnp
+      register: pf_ss
+      changed_when: false
+      failed_when: false
+
+    - name: Check the ports are free
+      vars:
+        listeners: >-
+          {%- set out = [] -%}
+          {%- for line in pf_ss.stdout_lines | default([]) -%}
+          {%- set f = line.split() -%}
+          {%- if f | length >= 4 -%}
+          {%- set _ = out.append({'port': f[3].rsplit(':', 1)[-1] | int,
+                                  'proc': (line | regex_search('users:\\(\\("([^"]+)"', '\\1') or ['unknown']) | first}) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ out }}
+        conflicts: >-
+          {%- set out = [] -%}
+          {%- for p in preflight_ports -%}
+          {%- for l in listeners if l.port == p.port | int and l.proc is not match(preflight_own_processes) -%}
+          {%- set _ = out.append('port ' ~ p.port ~ ' (' ~ p.what ~ ') is taken by ' ~ l.proc) -%}
+          {%- endfor -%}
+          {%- endfor -%}
+          {{ out | unique }}
+      ansible.builtin.set_fact:
+        pf_fail: "{{ pf_fail + conflicts }}"
+        pf_warn: "{{ pf_warn + ([] if pf_ss.rc == 0 else ['could not list listening ports (ss is missing); port conflicts not checked']) }}"
+
+    - name: Read service states
+      ansible.builtin.service_facts:
+
+    - name: Read ufw status
+      ansible.builtin.command: ufw status
+      register: pf_ufw
+      changed_when: false
+      failed_when: false
+      when: ansible_facts.services['ufw.service'] is defined
+
+    - name: Check for a host firewall
+      vars:
+        firewalld_on: "{{ (ansible_facts.services['firewalld.service'] | default({})).state | default('') == 'running' }}"
+        ufw_on: "{{ 'Status: active' in (pf_ufw.stdout | default('')) }}"
+      ansible.builtin.set_fact:
+        pf_warn: >-
+          {{ pf_warn + [('firewalld' if firewalld_on else 'ufw') ~ ' is active and the roles do not open ports:'
+             ~ ' between the nodes allow TCP 2379, 2380, 5432, 7800, 8008, 9100, 9187, 57800;'
+             ~ ' from clients allow 443'] }}
+      when: firewalld_on or ufw_on
+
+    - name: Note SELinux
+      ansible.builtin.set_fact:
+        pf_info: "{{ pf_info + ['SELinux is ' ~ ansible_selinux.mode] }}"
+      when: (ansible_selinux | default({})).status | default('') == 'enabled'
+
+    - name: Read the node clock
+      ansible.builtin.command: date +%s
+      register: pf_clock
+      changed_when: false
+
+    - name: Check clock skew against this machine
+      vars:
+        skew: "{{ (pf_clock.stdout | int - now().timestamp() | int) | abs }}"
+      ansible.builtin.set_fact:
+        pf_warn: >-
+          {{ pf_warn + ['clock is ' ~ skew ~ ' s off this machine; the install sets up chrony,'
+             ~ ' but check the node can reach an NTP server'] }}
+      when: skew | int > preflight_max_clock_skew_s
+
+    # The roles fetch packages and release artifacts from these hosts. The
+    # distribution's own package mirror is not checked here.
+    - name: Check the download sources are reachable
+      ansible.builtin.uri:
+        url: "{{ item }}"
+        method: HEAD
+        timeout: 10
+        follow_redirects: none
+      loop: "{{ preflight_online_hosts[ansible_os_family] | default([]) }}"
+      register: pf_online
+      failed_when: false
+      when: not offline
+
+    - name: Report unreachable download sources
+      vars:
+        # Any HTTP answer will do; -1 means no connection.
+        unreachable: >-
+          {{ pf_online.results | default([]) | rejectattr('skipped', 'defined')
+             | selectattr('status', '==', -1) | map(attribute='item') | list }}
+      ansible.builtin.set_fact:
+        pf_fail: >-
+          {{ pf_fail + ['cannot reach ' ~ (unreachable | join(', '))
+             ~ '; give the node internet access or install from an offline bundle (./configure --offline)'] }}
+      when: unreachable | length > 0
+
+    # pgBackRest runs over SSH between the nodes, and every cluster port
+    # needs the same path, so a node that cannot reach another one's SSH
+    # port will not form a cluster.
+    - name: Check the other nodes are reachable
+      ansible.builtin.wait_for:
+        host: "{{ item.host }}"
+        port: 22
+        timeout: 5
+      loop: "{{ cluster_nodes | rejectattr('name', '==', inventory_hostname) | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: pf_peers
+      failed_when: false
+
+    - name: Report unreachable nodes
+      vars:
+        unreachable: >-
+          {{ pf_peers.results | default([]) | selectattr('msg', 'defined')
+             | selectattr('msg', 'match', 'Timeout') | map(attribute='item.name') | list }}
+      ansible.builtin.set_fact:
+        pf_fail: "{{ pf_fail + ['cannot reach ' ~ (unreachable | join(', ')) ~ ' on TCP 22'] }}"
+      when: unreachable | length > 0
+
+    - name: Check the VIP
+      when: cluster_vip | default('') | length > 0
+      block:
+        # keepalived puts the VIP on the default-route interface.
+        - name: Check the VIP is on the node's network
+          ansible.builtin.command:
+            argv:
+              - python3
+              - -c
+              - |
+                import ipaddress, sys
+                net = ipaddress.ip_interface(sys.argv[1] + "/" + sys.argv[2]).network
+                print("yes" if ipaddress.ip_address(sys.argv[3]) in net else net)
+              - "{{ ansible_default_ipv4.address | default('0.0.0.0') }}"
+              - "{{ ansible_default_ipv4.netmask | default('255.255.255.255') }}"
+              - "{{ cluster_vip }}"
+          register: pf_vip_net
+          changed_when: false
+          when: ansible_default_ipv4.address is defined
+
+        - name: Report a VIP off the node's network
+          ansible.builtin.set_fact:
+            pf_fail: >-
+              {{ pf_fail + ['the VIP ' ~ cluster_vip ~ ' is not on ' ~ (ansible_default_ipv4.interface | default('the default interface'))
+                 ~ ' (' ~ pf_vip_net.stdout ~ '); keepalived can only move it within the network the nodes are on'] }}
+          when: pf_vip_net.stdout | default('yes') != 'yes'
+
+        - name: Ping the VIP
+          ansible.builtin.command: ping -c 2 -W 1 {{ cluster_vip }}
+          register: pf_vip_ping
+          changed_when: false
+          failed_when: false
+          vars:
+            held: >-
+              {{ groups['cluster'] | map('extract', hostvars)
+                 | map(attribute='ansible_all_ipv4_addresses', default=[]) | flatten }}
+          when:
+            - inventory_hostname == groups['cluster'][0]
+            - cluster_vip not in held
+
+        - name: Report a VIP already in use
+          ansible.builtin.set_fact:
+            pf_fail: "{{ pf_fail + ['the VIP ' ~ cluster_vip ~ ' already answers ping and no node holds it: another machine uses it'] }}"
+          when: pf_vip_ping.rc | default(1) == 0
+
+- name: Preflight report
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  tags: [preflight]
+  tasks:
+    - name: Show the report
+      vars:
+        nodes: "{{ groups['cluster'] | default([]) }}"
+      ansible.builtin.debug:
+        msg: >-
+          {%- set lines = [] -%}
+          {%- for n in nodes -%}
+          {%- set h = hostvars[n] -%}
+          {%- if h.pf_fail is not defined -%}
+          {%- set _ = lines.append(n ~ ': FAIL  not checked (unreachable)') -%}
+          {%- else -%}
+          {%- for m in h.pf_fail %}{% set _ = lines.append(n ~ ': FAIL  ' ~ m) %}{% endfor -%}
+          {%- for m in h.pf_warn %}{% set _ = lines.append(n ~ ': WARN  ' ~ m) %}{% endfor -%}
+          {%- for m in h.pf_info %}{% set _ = lines.append(n ~ ': info  ' ~ m) %}{% endfor -%}
+          {%- if (h.pf_fail + h.pf_warn) | length == 0 %}{% set _ = lines.append(n ~ ': ok') %}{% endif -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ lines }}
+
+    - name: Stop on failures
+      vars:
+        failing: >-
+          {{ groups['cluster'] | default([]) | map('extract', hostvars)
+             | selectattr('pf_fail', 'undefined') | list | length
+             + groups['cluster'] | default([]) | map('extract', hostvars)
+             | selectattr('pf_fail', 'defined') | map(attribute='pf_fail') | flatten | length }}
+      ansible.builtin.assert:
+        that: failing | int == 0
+        fail_msg: >-
+          Preflight found {{ failing }} problem(s), listed above as FAIL. Fix them and
+          re-run ./preflight. Nothing was installed. If a check is wrong for your
+          environment, ./install --skip-tags preflight skips them all.
+        success_msg: Preflight passed.

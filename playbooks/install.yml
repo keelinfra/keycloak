@@ -1,6 +1,11 @@
 ---
 # keelinfra/keycloak — full stack install.
 # Orchestration order matters: data layer first, then Keycloak, then observability.
+# Preflight runs first and stops before anything changes if a node is not fit;
+# ./install --skip-tags preflight skips it.
+
+- name: Preflight
+  ansible.builtin.import_playbook: preflight.yml
 
 - name: Prepare all nodes
   hosts: cluster
