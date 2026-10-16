@@ -116,10 +116,13 @@ bootcmd:
   - grep -q kc-s3 /etc/hosts || echo "$PREFIX.1 kc-s3" >> /etc/hosts
 CLOUD
   printf 'instance-id: %s\nlocal-hostname: %s\n' "$node-$(date +%s)" "$node" > "$STATE/$node-meta-data"
+  # The seed goes on a virtio disk, not a CD-ROM: the default machine puts a
+  # CD-ROM on IDE, which RHEL 9 kernels do not drive, and cloud-init then
+  # never sees its data (the VM boots as "localhost" with no ssh key).
   cloud-localds "$DISKS/$node-seed.iso" "$STATE/$node-user-data" "$STATE/$node-meta-data"
   virt-install --name "$node" --memory "$MEM" --vcpus "$CPUS" --cpu host-passthrough \
     --import --disk "path=$DISKS/$node.qcow2,bus=virtio" \
-    --disk "path=$DISKS/$node-seed.iso,device=cdrom" \
+    --disk "path=$DISKS/$node-seed.iso,device=disk,bus=virtio,readonly=on" \
     --network "network=$NET,mac=52:54:00:6b:00:1$i,model=virtio" \
     --osinfo detect=on,require=off --graphics none \
     --serial "file,path=$DISKS/$node-console.log" \
