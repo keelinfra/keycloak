@@ -8,6 +8,7 @@ groups:
         labels: {severity: critical}
         annotations:
           summary: "Keycloak on {{ '{{ $labels.instance }}' }} is down"
+          runbook_url: "{{ alert_runbook_base }}#keycloakdown"
 
       - alert: PostgresDown
         expr: up{job="patroni"} == 0
@@ -15,6 +16,7 @@ groups:
         labels: {severity: critical}
         annotations:
           summary: "Patroni/PostgreSQL on {{ '{{ $labels.instance }}' }} is down"
+          runbook_url: "{{ alert_runbook_base }}#postgresdown"
 
       - alert: NoPostgresLeader
         expr: sum(patroni_primary) == 0 or absent(patroni_primary)
@@ -22,6 +24,7 @@ groups:
         labels: {severity: critical}
         annotations:
           summary: "PostgreSQL cluster has no leader — writes are failing"
+          runbook_url: "{{ alert_runbook_base }}#nopostgresleader"
 
       - alert: PostgresReplicationLag
         expr: ((scalar(max(patroni_xlog_location)) - patroni_xlog_replayed_location) and on(instance) (patroni_replica == 1)) > 104857600
@@ -29,6 +32,7 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: "Replica {{ '{{ $labels.instance }}' }} is {{ '{{ $value | humanize1024 }}' }}B behind"
+          runbook_url: "{{ alert_runbook_base }}#postgresreplicationlag"
 
       - alert: BackupTooOld
         expr: time() - pgbackrest_last_backup_timestamp > 93600
@@ -36,6 +40,7 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: "Last pgBackRest backup in repo {{ '{{ $labels.repo }}' }} is older than 26 hours"
+          runbook_url: "{{ alert_runbook_base }}#backuptooold"
 
       - alert: EtcdNoLeader
         expr: etcd_server_has_leader == 0
@@ -43,6 +48,7 @@ groups:
         labels: {severity: critical}
         annotations:
           summary: "etcd on {{ '{{ $labels.instance }}' }} has no leader — Patroni cannot fail over"
+          runbook_url: "{{ alert_runbook_base }}#etcdnoleader"
 
       - alert: ExporterDown
         expr: up{job=~"node|postgres|etcd"} == 0
@@ -50,6 +56,7 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: "{{ '{{ $labels.job }}' }} metrics on {{ '{{ $labels.instance }}' }} are not being scraped"
+          runbook_url: "{{ alert_runbook_base }}#exporterdown"
 
       - alert: DiskAlmostFull
         expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.15
@@ -57,3 +64,4 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: "{{ '{{ $labels.instance }}' }} root filesystem below 15% free"
+          runbook_url: "{{ alert_runbook_base }}#diskalmostfull"
