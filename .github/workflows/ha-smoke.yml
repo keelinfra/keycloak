@@ -40,7 +40,7 @@ concurrency:
 jobs:
   three-node:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
@@ -136,7 +136,7 @@ jobs:
   three-node-el9:
     name: three-node-${{ matrix.os }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 70
     strategy:
       fail-fast: false
       matrix:

@@ -24,7 +24,8 @@
   register: ca_packed
   changed_when: false
 
-# Needs the vault password file the wrappers (./install, ./renew-certs, ...) set.
+# ansible-vault takes the vault password file the wrappers (./install,
+# ./renew-certs, ...) set in ANSIBLE_VAULT_PASSWORD_FILE.
 - name: Bring the CA copy to the control machine
   when:
     - "'PACKED' in ca_packed.stdout"
@@ -41,7 +42,6 @@
     - name: Encrypt it with the vault password
       ansible.builtin.shell: >-
         ansible-vault encrypt
-        --vault-password-file "{{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') }}"
         --output "{{ tls_ca_backup }}.new" "{{ tls_ca_backup }}.tmp"
         && chmod 600 "{{ tls_ca_backup }}.new"
         && mv "{{ tls_ca_backup }}.new" "{{ tls_ca_backup }}"
