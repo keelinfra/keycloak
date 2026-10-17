@@ -22,7 +22,7 @@
 
 - name: Check the rebuild request
   hosts: cluster
-  gather_facts: false
+  gather_facts: true
   tasks:
     - name: The rebuild was confirmed
       ansible.builtin.assert:

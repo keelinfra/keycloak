@@ -31,9 +31,10 @@
             query: CREATE TABLE keelinfra_restore_check (note text); INSERT INTO keelinfra_restore_check VALUES ('before');
           changed_when: true
 
+        # Not pause: pause runs once, on the first host, where this block is skipped.
         - name: Let a second pass
-          ansible.builtin.pause:
-            seconds: 2
+          ansible.builtin.wait_for:
+            timeout: 2
 
         - name: Read the restore target, after the row
           community.postgresql.postgresql_query:
@@ -41,9 +42,10 @@
             query: SELECT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || '+00' AS t
           register: target
 
+        # Not pause: pause runs once, on the first host, where this block is skipped.
         - name: Let another second pass
-          ansible.builtin.pause:
-            seconds: 2
+          ansible.builtin.wait_for:
+            timeout: 2
 
         - name: Drop the table, the change the restore undoes
           community.postgresql.postgresql_query:
