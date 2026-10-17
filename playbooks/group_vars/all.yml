@@ -11,6 +11,12 @@ postgres_data_dir: "{{ postgres_home }}/{{ postgres_version }}/patroni"
 postgres_bin_dir: >-
   {{ '/usr/pgsql-' ~ postgres_version ~ '/bin' if ansible_os_family == 'RedHat'
      else '/usr/lib/postgresql/' ~ postgres_version ~ '/bin' }}
+# Offline installs on the RHEL family: every dnf task reads only the
+# bundle's repository (roles/common/tasks/offline_repo.yml), since dnf
+# fails on a configured source it cannot reach. Passed to dnf and package
+# tasks as disablerepo/enablerepo; omitted otherwise.
+dnf_offline: >-
+  {{ ansible_os_family == 'RedHat' and (keelinfra_offline_dir | default('') | length > 0) }}
 keycloak_db_name: keycloak
 keycloak_db_user: keycloak
 haproxy_pg_port: 5433

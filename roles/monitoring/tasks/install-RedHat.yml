@@ -60,10 +60,12 @@
     baseurl: https://rpm.grafana.com
     gpgcheck: true
     gpgkey: https://rpm.grafana.com/gpg.key
-  when: inventory_hostname == monitoring_host
+  when: inventory_hostname == monitoring_host and not dnf_offline | bool
 
 - name: Install Grafana (monitoring host)
   ansible.builtin.dnf:
     name: grafana
     state: present
+    disablerepo: "{{ '*' if dnf_offline | bool else omit }}"
+    enablerepo: "{{ 'keelinfra-offline' if dnf_offline | bool else omit }}"
   when: inventory_hostname == monitoring_host

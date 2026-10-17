@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Runs inside ubuntu:24.04 for bundle/build.sh. Downloads the release
-# artifacts the roles fetch with get_url (Keycloak, etcd, keycloak-config-cli)
-# into /out/dist and the Ansible collections into /out/collections, then
+# artifacts the roles fetch with get_url (Keycloak, etcd, keycloak-config-cli,
+# and on Rocky Linux the Prometheus tools) into /out/dist and the Ansible collections into /out/collections, then
 # writes /out/bundle.yml. Versions are read from the roles, so a bundle
 # always matches the checkout that built it.
-# Env: VERSION, ARCH, DIST_URL.
+# Env: VERSION, OS, ARCH, DIST_URL.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -39,6 +39,24 @@ cli_url="$(cd /src && ANSIBLE_LOCALHOST_WARNING=False /tmp/venv/bin/ansible loca
 [[ "$cli_url" == https://* ]] || { echo "error: could not resolve config_cli_jar_url" >&2; exit 1; }
 get "$cli_url" "/out/dist/$(basename "$cli_url")"
 
+# Rocky Linux packages none of the Prometheus tools; roles/monitoring
+# installs the upstream releases listed in its defaults. Each is checked
+# against its release's sha256sums.txt.
+if [[ "$OS" == rocky9 ]]; then
+  while read -r rel_repo rel_version; do
+    file="$(basename "$rel_repo")-$rel_version.linux-$ARCH.tar.gz"
+    base="https://github.com/$rel_repo/releases/download/v$rel_version"
+    get "$base/$file" "/out/dist/$file"
+    get "$base/sha256sums.txt" /tmp/release.sums
+    (cd /out/dist && grep " $file\$" /tmp/release.sums | sha256sum -c --quiet)
+  done < <(cd /src && ANSIBLE_LOCALHOST_WARNING=False /tmp/venv/bin/ansible localhost -c local \
+    -e @roles/monitoring/defaults/main.yml -m ansible.builtin.debug \
+    -a "msg={{ monitoring_releases.values() | map(attribute='repo') | zip(monitoring_releases.values() | map(attribute='version')) | map('join', ' ') | join(';') }}" \
+    2>/dev/null | sed -n 's/.*"msg": "\(.*\)".*/\1/p' | tr ';' '\n')
+  [[ "$(find /out/dist -name 'prometheus-*' | wc -l)" -eq 1 ]] \
+    || { echo "error: could not resolve the Prometheus releases from roles/monitoring" >&2; exit 1; }
+fi
+
 # Collections for the control node (./configure installs them with --offline).
 /tmp/venv/bin/ansible-galaxy collection download -r /src/requirements.yml -p /out/collections >/dev/null
 
@@ -47,8 +65,9 @@ cat > /out/bundle.yml <<YML
 ---
 # keelinfra/keycloak offline bundle — read by ./configure and roles/common.
 format: 1
-os: ubuntu24.04
-codename: noble
+os: $OS
+family: $([[ "$OS" == rocky9 ]] && echo redhat || echo debian)
+codename: $([[ "$OS" == rocky9 ]] && echo '"9"' || echo noble)
 arch: $ARCH
 keycloak_version: "$VERSION"
 keycloak_dist: "$kc_file"

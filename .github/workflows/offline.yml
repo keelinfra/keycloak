@@ -1,7 +1,7 @@
 ---
 name: offline
-# Air-gapped install and upgrade on the container rig: build offline bundles
-# (bundle/build.sh), cut the three nodes off from the internet, then
+# Air-gapped install and upgrade on the container rig, on Ubuntu 24.04 and
+# Rocky Linux 9 nodes: build offline bundles (bundle/build.sh), cut the three nodes off from the internet, then
 # ./configure --offline, ./install, every drill, and a rolling
 # ./upgrade --offline onto the next patch release. Fails when a role
 # installs or downloads something the bundle does not carry.
@@ -30,7 +30,7 @@ on:
       - dev/ha-*.sh
       - .github/workflows/offline.yml
   schedule:
-    # weekly: a new package in Ubuntu, PGDG or Grafana can change the tree
+    # weekly: a new package in Ubuntu, Rocky, EPEL, PGDG or Grafana can change the tree
     - cron: "40 3 * * 1"
   workflow_dispatch:
 
@@ -47,8 +47,21 @@ env:
 
 jobs:
   air-gapped:
+    name: air-gapped (${{ matrix.os }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu24.04
+            node_target: node
+          - os: rocky9
+            node_target: node-rocky9
+    env:
+      HA_OS: ${{ matrix.os }}
+      HA_NODE_TARGET: ${{ matrix.node_target }}
+      BUNDLE: .dev/bundle/keelinfra-keycloak-offline
     steps:
       - uses: actions/checkout@v7
 
@@ -63,14 +76,14 @@ jobs:
 
       - name: Build offline bundles for ${{ env.FROM }} and ${{ env.TO }}
         run: |
-          bundle/build.sh --version "$FROM" --out .dev/bundle
-          bundle/build.sh --version "$TO" --out .dev/bundle
+          bundle/build.sh --version "$FROM" --os "$HA_OS" --out .dev/bundle
+          bundle/build.sh --version "$TO" --os "$HA_OS" --out .dev/bundle
           ls -la .dev/bundle
 
       - name: Start the rig offline and configure from the ${{ env.FROM }} bundle
         run: |
-          dev/ha-up.sh --no-build --version "$FROM" \
-            --offline ".dev/bundle/keelinfra-keycloak-offline-$FROM-ubuntu24.04-amd64.tar.gz"
+          dev/ha-up.sh --no-build --os "$HA_OS" --version "$FROM" \
+            --offline "$BUNDLE-$FROM-$HA_OS-amd64.tar.gz"
 
       - name: Install
         run: dev/ha-exec.sh ./install
@@ -91,7 +104,7 @@ jobs:
       - name: Upgrade to ${{ env.TO }} from its bundle
         run: |
           dev/ha-exec.sh ./upgrade --to "$TO" \
-            --offline "/work/.dev/bundle/keelinfra-keycloak-offline-$TO-ubuntu24.04-amd64.tar.gz"
+            --offline "/work/$BUNDLE-$TO-$HA_OS-amd64.tar.gz"
           dev/ha-exec.sh ./verify
 
       - name: The nodes stayed offline
@@ -106,7 +119,7 @@ jobs:
         if: always()
         run: |
           ls -la .dev/bundle || true
-          echo "### Offline bundles" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Offline bundles ($HA_OS)" >> "$GITHUB_STEP_SUMMARY"
           (cd .dev/bundle 2>/dev/null && du -h ./*.tar.gz) >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Collect node logs
@@ -116,7 +129,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: offline-logs
+          name: offline-${{ matrix.os }}-logs
           path: .dev/containers/artifacts
           retention-days: 14
           if-no-files-found: ignore

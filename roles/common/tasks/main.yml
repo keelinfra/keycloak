@@ -50,6 +50,8 @@
   ansible.builtin.dnf:
     name: "{{ common_packages_el }}"
     state: present
+    disablerepo: "{{ '*' if dnf_offline | bool else omit }}"
+    enablerepo: "{{ 'keelinfra-offline' if dnf_offline | bool else omit }}"
   when: ansible_os_family == 'RedHat'
 
 # Ubuntu images ship cron running; minimal RHEL-family installs may not.

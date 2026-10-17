@@ -3,6 +3,8 @@
   ansible.builtin.package:
     name: [haproxy, socat]
     state: present
+    disablerepo: "{{ '*' if dnf_offline | bool else omit }}"
+    enablerepo: "{{ 'keelinfra-offline' if dnf_offline | bool else omit }}"
 
 # Debian's package creates /run/haproxy for the stats socket; the RHEL
 # family's does not.
