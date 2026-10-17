@@ -49,15 +49,18 @@
       become: false
       changed_when: false
 
-    - name: Remove the unencrypted copies
+    # Two tasks, not one loop over both machines: Ansible reuses the first
+    # item's delegated connection for the next one.
+    - name: Remove the unencrypted copy on the control machine
       ansible.builtin.file:
-        path: "{{ item.path }}"
+        path: "{{ tls_ca_backup }}.tmp"
         state: absent
-      loop:
-        - {path: "{{ tls_ca_backup }}.tmp", where: localhost}
-        - {path: /root/.keelinfra-ca-backup.tgz, where: "{{ inventory_hostname }}"}
-      loop_control:
-        label: "{{ item.path }}"
-      delegate_to: "{{ item.where }}"
-      become: "{{ item.where != 'localhost' }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Remove the archive on the CA host
+      ansible.builtin.file:
+        path: /root/.keelinfra-ca-backup.tgz
+        state: absent
       changed_when: false
