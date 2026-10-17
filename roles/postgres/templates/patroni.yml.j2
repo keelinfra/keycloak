@@ -7,6 +7,12 @@ etcd3:
 {% for node in cluster_nodes %}
     - {{ node.host }}:2379
 {% endfor %}
+{% if internal_tls | default(false) | bool %}
+  protocol: https
+  cacert: {{ internal_ca_file }}
+  cert: {{ internal_cert_file }}
+  key: {{ internal_key_file }}
+{% endif %}
 
 restapi:
   listen: {{ ansible_host }}:{{ patroni_rest_port }}
@@ -14,6 +20,17 @@ restapi:
   authentication:
     username: patroni
     password: {{ vault_patroni_api_password }}
+{% if internal_tls | default(false) | bool %}
+  certfile: {{ internal_cert_file }}
+  keyfile: {{ internal_key_file }}
+  cafile: {{ internal_ca_file }}
+
+# patronictl, and Patroni calling the other members' API
+ctl:
+  cacert: {{ internal_ca_file }}
+  certfile: {{ internal_cert_file }}
+  keyfile: {{ internal_key_file }}
+{% endif %}
 
 bootstrap:
   dcs:
@@ -30,13 +47,6 @@ bootstrap:
   initdb:
     - encoding: UTF8
     - data-checksums
-  pg_hba:
-    - local all all peer
-    - host all all 127.0.0.1/32 scram-sha-256
-{% for node in cluster_nodes %}
-    - host all all {{ node.host }}/32 scram-sha-256
-    - host replication replicator {{ node.host }}/32 scram-sha-256
-{% endfor %}
 
 postgresql:
   listen: "{{ ansible_host }},127.0.0.1:{{ postgres_port }}"
@@ -44,14 +54,38 @@ postgresql:
   data_dir: {{ postgres_data_dir }}
   bin_dir: {{ postgres_bin_dir }}
   pgpass: {{ postgres_home }}/.pgpass_patroni
+  # Kept here, not under bootstrap, so a rerun applies changes to it.
+  # With internal TLS, connections from the nodes must use TLS (hostssl).
+  pg_hba:
+    - local all all peer
+    - host all all 127.0.0.1/32 scram-sha-256
+{% for node in cluster_nodes %}
+    - {{ 'hostssl' if internal_tls | default(false) | bool else 'host' }} all all {{ node.host }}/32 scram-sha-256
+    - {{ 'hostssl' if internal_tls | default(false) | bool else 'host' }} replication replicator {{ node.host }}/32 scram-sha-256
+{% endfor %}
   authentication:
     superuser:
       username: postgres
       password: {{ vault_postgres_superuser_password }}
+{% if internal_tls | default(false) | bool %}
+      sslmode: verify-full
+      sslrootcert: {{ internal_ca_file }}
+{% endif %}
     replication:
       username: replicator
       password: {{ vault_postgres_replication_password }}
+{% if internal_tls | default(false) | bool %}
+      sslmode: verify-full
+      sslrootcert: {{ internal_ca_file }}
+{% endif %}
   parameters:
 {% for k, v in postgres_parameters.items() %}
     {{ k }}: {{ v }}
 {% endfor %}
+{% if internal_tls | default(false) | bool %}
+    ssl: "on"
+    ssl_cert_file: {{ internal_cert_file }}
+    ssl_key_file: {{ internal_key_file }}
+    ssl_ca_file: {{ internal_ca_file }}
+    ssl_min_protocol_version: TLSv1.2
+{% endif %}

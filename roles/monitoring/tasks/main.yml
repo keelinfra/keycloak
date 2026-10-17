@@ -6,25 +6,65 @@
   ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
 
 # --- every node: exporters ---------------------------------------------
+# The exporters and Prometheus run as prometheus and read the node's
+# internal key (root:ssl-cert, 0640).
+- name: Let prometheus read the internal TLS key
+  ansible.builtin.user:
+    name: prometheus
+    groups: [ssl-cert]
+    append: true
+  when: internal_tls | default(false) | bool
+  register: prom_group
+
+- name: Configure exporter TLS
+  ansible.builtin.copy:
+    content: |
+      # Managed by keelinfra
+      tls_server_config:
+        cert_file: {{ internal_cert_file }}
+        key_file: {{ internal_key_file }}
+        client_auth_type: RequireAndVerifyClientCert
+        client_ca_file: {{ internal_ca_file }}
+    dest: "{{ exporter_web_config }}"
+    owner: root
+    group: ssl-cert
+    mode: "0640"
+  when: internal_tls | default(false) | bool
+  register: exporter_tls
+
+# Local connection over loopback, which pg_hba leaves as plain host.
 - name: Configure postgres exporter connection
   ansible.builtin.copy:
-    content: >
-      # Managed by keelinfra{{ '\n' }}DATA_SOURCE_NAME="postgresql://postgres:{{
-      vault_postgres_superuser_password }}@127.0.0.1:{{ postgres_port }}/postgres?sslmode=disable"
+    content: |
+      # Managed by keelinfra
+      DATA_SOURCE_NAME="postgresql://postgres:{{ vault_postgres_superuser_password
+      }}@127.0.0.1:{{ postgres_port }}/postgres?sslmode=disable"
+      ARGS="{{ exporter_args }}"
     dest: /etc/default/prometheus-postgres-exporter
     mode: "0600"
   register: pgexp_conf
 
+- name: Configure node exporter arguments
+  ansible.builtin.lineinfile:
+    path: /etc/default/prometheus-node-exporter
+    regexp: '^ARGS='
+    line: 'ARGS="{{ exporter_args }}"'
+    create: true
+    mode: "0644"
+  register: nodeexp_conf
+
 - name: Restart postgres exporter
   ansible.builtin.systemd:
     name: prometheus-postgres-exporter
-    state: "{{ 'restarted' if pgexp_conf.changed else 'started' }}"
+    state: >-
+      {{ 'restarted' if (pgexp_conf.changed or exporter_tls.changed or prom_group.changed) else 'started' }}
     enabled: true
 
-- name: Ensure node exporter runs
+- name: Restart node exporter
   ansible.builtin.systemd:
     name: prometheus-node-exporter
-    state: started
+    state: >-
+      {{ 'restarted' if (nodeexp_conf.changed or exporter_tls.changed or prom_group.changed) else 'started' }}
     enabled: true
 
 # --- monitoring host: prometheus + grafana + backup metrics ------------
@@ -54,7 +94,7 @@
     - name: Restart prometheus
       ansible.builtin.systemd:
         name: prometheus
-        state: "{{ 'restarted' if (prom_conf.changed or prom_rules.changed) else 'started' }}"
+        state: "{{ 'restarted' if (prom_conf.changed or prom_rules.changed or prom_group.changed) else 'started' }}"
         enabled: true
 
     - name: Install pgbackrest metrics exporter script

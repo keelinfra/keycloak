@@ -65,7 +65,8 @@ PostgreSQL leader dies now, writes stop until etcd recovers.
 
 1. On each node: `sudo systemctl status etcd` and `sudo journalctl -u etcd -n 200`.
 2. From any node:
-   `/usr/local/bin/etcdctl --endpoints=http://<node1>:2379,http://<node2>:2379,http://<node3>:2379 endpoint status -w table`.
+   `sudo -i etcdctl endpoint status -w table` (root's shell already points etcdctl at every node,
+   with the client certificate).
    It shows which members answer and who leads.
 3. Look for the usual causes in the journal: a member that cannot reach the others (network or a
    host firewall on TCP 2379 and 2380), a full disk under `/var/lib/etcd`, or "apply request took
@@ -231,7 +232,8 @@ alerts that depend on the missing metrics cannot fire.
 | etcd | `etcd` itself | 2379 |
 
 `sudo systemctl status <unit>` on the node in the alert, then from the first node
-`curl -s http://<node>:<port>/metrics | head`.
+`sudo curl -s --cacert /etc/keelinfra/tls/internal/ca.crt --cert /etc/keelinfra/tls/internal/node.crt --key /etc/keelinfra/tls/internal/node.key https://<node>:<port>/metrics | head`
+(use `http://` and no certificate options on a cluster with `internal_tls: false`).
 
 **Fix**
 

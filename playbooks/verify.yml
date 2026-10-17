@@ -15,13 +15,18 @@
   tasks:
     - name: Patroni member state
       ansible.builtin.uri:
-        url: "http://{{ ansible_host }}:{{ patroni_rest_port }}/health"
+        url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/health"
+        ca_path: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
         status_code: 200
       changed_when: false
 
     - name: Etcd endpoint health
       ansible.builtin.command:
-        cmd: /usr/local/bin/etcdctl endpoint health
+        cmd: >-
+          /usr/local/bin/etcdctl --endpoints={{ etcd_scheme }}://127.0.0.1:2379
+          {% if internal_tls | default(false) | bool %}--cacert={{ internal_ca_file }}
+          --cert={{ internal_cert_file }} --key={{ internal_key_file }}{% endif %}
+          endpoint health
       changed_when: false
 
     - name: Keycloak readiness
@@ -40,8 +45,70 @@
         login_user: "{{ keycloak_db_user }}"
         login_password: "{{ vault_keycloak_db_password }}"
         login_db: "{{ keycloak_db_name }}"
+        ssl_mode: "{{ 'verify-ca' if internal_tls | default(false) | bool else 'prefer' }}"
+        ca_cert: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
         query: SELECT 1
       changed_when: false
+
+    # Every port one node talks to on another must answer in TLS: etcd
+    # (clients, peers), the Patroni API, PostgreSQL, Keycloak (HTTPS,
+    # management, cluster transport) and the exporters Prometheus scrapes.
+    # Not 57800: JGroups failure detection, liveness pings only, stays plain.
+    # 7800 only with several nodes: a single node has no cluster peers, and
+    # JGroups may bind elsewhere than a loopback node address.
+    - name: Check the ports between the nodes speak TLS
+      when: internal_tls | default(false) | bool
+      block:
+        - name: Probe every node's ports for TLS
+          ansible.builtin.script:
+            cmd: >-
+              files/tls-probe.py
+              {% for node in cluster_nodes %}
+              {{ node.host }}:2379 {{ node.host }}:2380 {{ node.host }}:{{ patroni_rest_port }}
+              {{ node.host }}:{{ postgres_port }}:pg {{ node.host }}:{{ keycloak_https_port }}
+              {{ node.host }}:{{ keycloak_mgmt_port }}
+              {{ (node.host ~ ':7800') if cluster_nodes | length > 1 else '' }}
+              {{ node.host }}:{{ node_exporter_port | default(9100) }}
+              {{ node.host }}:{{ postgres_exporter_port | default(9187) }}
+              {% endfor %}
+            executable: python3
+          register: tls_probe
+          changed_when: false
+          failed_when: tls_probe.rc != 0
+
+        - name: Show the TLS probe
+          ansible.builtin.debug:
+            msg: "{{ tls_probe.stdout_lines }}"
+          run_once: true
+
+        # A loopback node address (single-node evaluation installs) falls
+        # under the plain local rule, which is not traffic between nodes.
+        - name: Try a plaintext PostgreSQL connection to every node
+          ansible.builtin.command:
+            cmd: >-
+              {{ postgres_bin_dir }}/psql -w -c 'SELECT 1'
+              "host={{ item.host }} port={{ postgres_port }} dbname={{ keycloak_db_name }}
+              user={{ keycloak_db_user }} sslmode=disable connect_timeout=5"
+          loop: "{{ cluster_nodes | rejectattr('host', 'match', '^127\\.') | list }}"
+          loop_control:
+            label: "{{ item.name }}"
+          register: pg_plain
+          changed_when: false
+          failed_when: >-
+            pg_plain.rc == 0 or 'no encryption' not in pg_plain.stderr
+
+        - name: Count database connections from the nodes without TLS
+          become: true
+          become_user: postgres
+          community.postgresql.postgresql_query:
+            login_db: postgres
+            query: >-
+              SELECT count(*) AS plain FROM pg_stat_activity a JOIN pg_stat_ssl s USING (pid)
+              WHERE a.client_addr IS NOT NULL AND NOT host(a.client_addr) IN ('127.0.0.1', '::1')
+              AND NOT s.ssl
+          register: pg_plain_sessions
+          changed_when: false
+          failed_when: pg_plain_sessions.query_result[0].plain | int > 0
 
     - name: Cluster summary
       ansible.builtin.command:

@@ -17,6 +17,8 @@ defaults
     retries 2
 
 # ---- PostgreSQL: always route to the Patroni leader --------------------
+# TCP passthrough: with internal TLS, Keycloak's JDBC driver and the
+# leader negotiate TLS end to end; the checks call the Patroni API over TLS.
 listen postgres_leader
     bind 127.0.0.1:{{ haproxy_pg_port }}
     mode tcp
@@ -24,7 +26,8 @@ listen postgres_leader
     http-check expect status 200
     default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
 {% for node in cluster_nodes %}
-    server {{ node.name }} {{ node.host }}:{{ postgres_port | default(5432) }} check port {{ patroni_rest_port }}
+    server {{ node.name }} {{ node.host }}:{{ postgres_port | default(5432) }} check port {{ patroni_rest_port }}{% if internal_tls | default(false) | bool %} check-ssl verify required ca-file {{ internal_ca_file }}{% endif %}
+
 {% endfor %}
 
 # ---- Keycloak: TLS passthrough to all healthy nodes --------------------

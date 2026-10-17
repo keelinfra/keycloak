@@ -12,6 +12,13 @@
   roles:
     - common
 
+# Before etcd: with internal_tls, etcd, Patroni and PostgreSQL start on
+# the internal certificates.
+- name: Deploy TLS material
+  hosts: cluster
+  roles:
+    - tls
+
 - name: Deploy etcd cluster
   hosts: etcd
   roles:
@@ -31,11 +38,6 @@
   hosts: postgres
   roles:
     - pgbackrest
-
-- name: Deploy TLS material
-  hosts: cluster
-  roles:
-    - tls
 
 - name: Deploy Keycloak cluster
   hosts: keycloak

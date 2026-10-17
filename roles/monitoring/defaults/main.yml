@@ -6,6 +6,11 @@ postgres_exporter_port: 9187
 monitoring_host: "{{ groups['monitoring'][0] }}"
 textfile_dir: /var/lib/prometheus/node-exporter
 alertmanager_port: 9093
+# With internal TLS the exporters serve HTTPS and only answer clients
+# holding a certificate from the internal CA (Prometheus uses the
+# monitoring node's own).
+exporter_web_config: "{{ internal_tls_dir }}/exporter-web.yml"
+exporter_args: "{{ '--web.config.file=' ~ exporter_web_config if internal_tls | default(false) | bool else '' }}"
 # Each alert links to its section in RUNBOOKS.md (annotation runbook_url).
 alert_runbook_base: https://github.com/keelinfra/keycloak/blob/main/RUNBOOKS.md
 grafana_dashboard_dir: /var/lib/grafana/dashboards/keelinfra
@@ -40,14 +45,15 @@ monitoring_releases:
 monitoring_el_units:
   prometheus-node-exporter:
     description: Prometheus node exporter
+    env_file: /etc/default/prometheus-node-exporter
     exec: >-
       /usr/local/bin/node_exporter --web.listen-address=:{{ node_exporter_port }}
-      --collector.textfile.directory={{ textfile_dir }}
+      --collector.textfile.directory={{ textfile_dir }} $ARGS
     monitoring_host_only: false
   prometheus-postgres-exporter:
     description: Prometheus PostgreSQL exporter
     env_file: /etc/default/prometheus-postgres-exporter
-    exec: /usr/local/bin/postgres_exporter --web.listen-address=:{{ postgres_exporter_port }}
+    exec: /usr/local/bin/postgres_exporter --web.listen-address=:{{ postgres_exporter_port }} $ARGS
     monitoring_host_only: false
   prometheus:
     description: Prometheus

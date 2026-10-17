@@ -25,7 +25,7 @@ keelinfra is the third option: a distribution you run yourself, with a subscript
 
 ## What you get
 
-- **HA Keycloak cluster** — multi-node, DB-persisted sessions, load balancer, TLS
+- **HA Keycloak cluster** — multi-node, DB-persisted sessions, load balancer, TLS for users and between the nodes (etcd, PostgreSQL, Patroni, metrics, all checked by `./verify`)
 - **PostgreSQL HA** — Patroni-managed, automatic failover
 - **Backups & PITR** — pgBackRest, scheduled, restore-tested; optional encrypted off-site copy to any S3-compatible bucket
 - **Observability** — Prometheus metrics and alert rules for the things that actually page you, Alertmanager routing to a webhook or email, and a Grafana overview dashboard

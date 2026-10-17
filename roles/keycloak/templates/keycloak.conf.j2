@@ -10,8 +10,11 @@ https-port={{ keycloak_https_port }}
 https-certificate-file={{ tls_dir }}/server.crt
 https-certificate-key-file={{ tls_dir }}/server.key
 
-# clustering: jdbc-ping discovery via the shared database (KC 26 default)
+# clustering: jdbc-ping discovery via the shared database (KC 26 default).
+# Keycloak encrypts this traffic itself (mutual TLS with certificates it
+# keeps in the database); stated here so it stays on.
 cache=ispn
+cache-embedded-mtls-enabled=true
 jgroups-bind-address={{ ansible_host }}
 
 health-enabled=true
