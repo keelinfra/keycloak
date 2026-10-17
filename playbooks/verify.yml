@@ -409,7 +409,7 @@
             systemctl stop patroni
           args:
             executable: /bin/bash
-          delegate_to: "{{ kill_leader }}"
+          delegate_to: "{{ kill_leader | default(inventory_hostname) }}"
           register: kill_at
           changed_when: true
 
@@ -534,7 +534,7 @@
           ansible.builtin.systemd:
             name: patroni
             state: started
-          delegate_to: "{{ kill_leader }}"
+          delegate_to: "{{ kill_leader | default(inventory_hostname) }}"
 
         - name: The killed member rejoins as a streaming replica
           ansible.builtin.command:
