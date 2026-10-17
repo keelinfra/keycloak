@@ -54,6 +54,8 @@
     # (clients, peers), the Patroni API, PostgreSQL, Keycloak (HTTPS,
     # management, cluster transport) and the exporters Prometheus scrapes.
     # Not 57800: JGroups failure detection, liveness pings only, stays plain.
+    # 7800 only with several nodes: a single node has no cluster peers, and
+    # JGroups may bind elsewhere than a loopback node address.
     - name: Check the ports between the nodes speak TLS
       when: internal_tls | default(false) | bool
       block:
@@ -64,7 +66,8 @@
               {% for node in cluster_nodes %}
               {{ node.host }}:2379 {{ node.host }}:2380 {{ node.host }}:{{ patroni_rest_port }}
               {{ node.host }}:{{ postgres_port }}:pg {{ node.host }}:{{ keycloak_https_port }}
-              {{ node.host }}:{{ keycloak_mgmt_port }} {{ node.host }}:7800
+              {{ node.host }}:{{ keycloak_mgmt_port }}
+              {{ (node.host ~ ':7800') if cluster_nodes | length > 1 else '' }}
               {{ node.host }}:{{ node_exporter_port | default(9100) }}
               {{ node.host }}:{{ postgres_exporter_port | default(9187) }}
               {% endfor %}
