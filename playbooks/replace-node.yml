@@ -16,23 +16,27 @@
 #     cloning PostgreSQL from the leader, HAProxy, pgBackRest, Keycloak,
 #     monitoring.
 #
-# The first node is not replaceable this way: it holds the internal CA, the
-# backup repository and monitoring. Run through ./replace-node.
+# The first node also holds the CAs, backup repository 1 and monitoring. Its
+# replacement gets the CAs back from the copy on the control machine, a new
+# repository 1 with a fresh full backup (the bucket keeps the history), and
+# a new, empty monitoring history. Run through ./replace-node.
 
 - name: Check the replacement request
-  hosts: primary
+  hosts: localhost
   gather_facts: false
+  vars:
+    first_node: "{{ groups['backup_repo'][0] }}"
+    ca_backup: >-
+      {{ playbook_dir }}/../inventory/ca-backup-{{ hostvars[groups['cluster'][0]].cluster_name }}.tgz.vault
   tasks:
-    - name: The node is part of this cluster and not the first node
+    - name: The node is part of a cluster of at least three
       ansible.builtin.assert:
         that:
           - replace_node | default('') in groups['cluster']
-          - replace_node != groups['primary'][0]
           - groups['cluster'] | length >= 3
         fail_msg: >-
-          ./replace-node takes the name of the second or a later node of a cluster with
-          at least three nodes, as listed in the cluster definition. The first node holds
-          the internal CA, the backup repository and monitoring and is not replaced this way.
+          ./replace-node takes the name of a node of a cluster with at least three nodes,
+          as listed in the cluster definition.
         quiet: true
 
     - name: The replacement was confirmed
@@ -41,12 +45,38 @@
         fail_msg: Run it through ./replace-node, which asks for confirmation.
         quiet: true
 
-    - name: Put the node in the replace_target group for the plays below
+    # The first node holds the CAs. Its replacement gets them back from the
+    # copy ./install keeps on this machine; without it every certificate
+    # would change.
+    - name: Look for the copy of the CAs
+      ansible.builtin.stat:
+        path: "{{ ca_backup }}"
+      register: ca_backup_file
+      when: replace_node == first_node
+
+    - name: The first node can only be replaced with the copy of its CAs
+      ansible.builtin.assert:
+        that: ca_backup_file.stat.exists
+        fail_msg: >-
+          {{ ca_backup }} is missing. ./install and ./renew-certs write it while the first
+          node is up; without it the first node cannot be replaced this way. Get help.
+        quiet: true
+      when: replace_node == first_node
+
+    # The checks and the etcd member swap run on a node that stays.
+    - name: Name the new machine and the node that runs the checks
       ansible.builtin.add_host:
-        name: "{{ replace_node }}"
-        groups: replace_target
+        name: "{{ item.name }}"
+        groups: "{{ item.group }}"
+      loop:
+        - {name: "{{ replace_node }}", group: replace_target}
+        - {name: "{{ groups['cluster'] | reject('equalto', replace_node) | first }}", group: replace_helper}
       changed_when: false
 
+- name: Check the rest of the cluster
+  hosts: replace_helper
+  gather_facts: false
+  tasks:
     - name: Etcd answers on this node
       ansible.builtin.command:
         cmd: >-
@@ -106,7 +136,7 @@
         - "{{ postgres_data_dir }}"
 
 - name: Swap the etcd member
-  hosts: primary
+  hosts: replace_helper
   gather_facts: false
   vars:
     etcdctl: >-
@@ -143,14 +173,15 @@
     - common
 
 # Signed on the first node, which keeps every node's key; the new machine
-# gets the same certificate the old one had.
+# gets the same certificate the old one had. A new first node gets the CAs
+# back from the copy on the control machine.
 - name: Install its certificates
   hosts: cluster
   tasks:
     - name: Run the tls role on the first node and the new machine
       ansible.builtin.include_role:
         name: tls
-      when: inventory_hostname in [groups['primary'][0], replace_node]
+      when: inventory_hostname in [groups['backup_repo'][0], replace_node]
 
 - name: Join etcd, clone PostgreSQL, start HAProxy
   hosts: replace_target

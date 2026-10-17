@@ -103,7 +103,7 @@ replica, then carry on.
   `sudo patronictl -c /etc/patroni/config.yml reinit <cluster> <node name>`. It copies the
   whole database over the network; expect load on the leader.
 - The machine is gone (dead disk, will not boot): put a new one at the same address and run
-  `./replace-node <node name>`. Not for the first node.
+  `./replace-node <node name>`. For the first node it needs `inventory/ca-backup-<cluster>.tgz.vault`.
 
 **Get help** if the node was the leader and no replica was promoted (that is
 [NoPostgresLeader](#nopostgresleader)), or if `reinit` fails.
@@ -272,11 +272,10 @@ reach each other.
 
 Stated plainly so you can plan around them:
 
-- **Losing the first node for good.** It holds Prometheus, Alertmanager, Grafana and backup
-  repository 1. The database fails over, but alerting and local backups stop until the node
-  returns; `backup_s3` keeps the backups safe.
-- **Replacing the first node, or moving a node to a new address.** `./replace-node` puts a new
-  machine in place of the second or third node at the same address (DEPLOYMENT.md, Day two).
+- **Alerting while the first node is down.** Prometheus, Alertmanager and Grafana run there
+  only; until `./replace-node` puts a new first node in place, nothing alerts.
+- **Moving a node to a new address.** `./replace-node` puts a new machine at the same address
+  (DEPLOYMENT.md, Day two).
 - **Replacing a CA.** The internal CA and, with `tls_mode: selfsigned`, the HTTPS CA last ten
   years; replacing one in a running cluster is not scripted.
 

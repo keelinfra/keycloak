@@ -10,6 +10,10 @@
     name: ssl-cert
     state: present
 
+- name: Put the CAs back on a new CA host
+  ansible.builtin.include_tasks: ca_restore.yml
+  when: inventory_hostname == tls_ca_host
+
 - name: Generate CA and server certificate (CA host only)
   when: tls_mode == 'selfsigned' and inventory_hostname == tls_ca_host
   block:
@@ -119,3 +123,7 @@
 - name: Set up cluster-internal TLS
   ansible.builtin.include_tasks: internal.yml
   when: internal_tls | default(false) | bool
+
+- name: Keep a copy of the CAs on the control machine
+  ansible.builtin.include_tasks: ca_backup.yml
+  when: inventory_hostname == tls_ca_host

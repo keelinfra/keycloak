@@ -7,3 +7,5 @@ tls_ca_host: "{{ groups['backup_repo'][0] }}"
 tls_cert_file: ""
 tls_key_file: ""
 tls_ca_file: ""
+# Copy of the CAs on the control machine, vault-encrypted (see ca_backup.yml)
+tls_ca_backup: "{{ playbook_dir }}/../inventory/ca-backup-{{ cluster_name }}.tgz.vault"
