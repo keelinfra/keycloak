@@ -64,6 +64,7 @@ Every claim above is a drill you can run against your own cluster:
 ```bash
 ./verify                     # health of every component
 ./verify --drill failover    # switch the PostgreSQL leader over, write through it
+./verify --drill db-kill     # kill -9 the PostgreSQL leader under login load; logins must come back
 ./verify --drill restore     # restore the latest backup of every repository to a scratch directory
 ./verify --drill session     # rolling-restart every node; logins must survive
 ./verify --drill alert       # send a test alert; every configured receiver must accept it

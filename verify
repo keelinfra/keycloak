@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# keelinfra/keycloak — verify: health checks + failover/restore/session drills.
-# Usage: ./verify [--drill failover|restore|session|alert|all]
+# keelinfra/keycloak — verify: health checks + failover/db-kill/restore/session drills.
+# Usage: ./verify [--drill failover|db-kill|restore|session|alert|all]
 set -euo pipefail
 cd "$(dirname "$0")"
 DRILL="health"
