@@ -84,6 +84,12 @@ jobs:
             ansible-playbook dev/restore-check.yml -e phase=after
           dev/ha-exec.sh ./verify
 
+      - name: Lose a node, put a fresh machine in its place, then check the cluster
+        run: |
+          dev/ha-wipe-node.sh kc-node3
+          dev/ha-exec.sh ./replace-node kc-node3 --yes
+          dev/ha-exec.sh ./verify
+
       - name: Resource use
         if: always()
         run: |
@@ -163,6 +169,12 @@ jobs:
           dev/ha-exec.sh bash -c './restore --yes --time "$(cat /tmp/keelinfra-restore-time)"'
           dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
             ansible-playbook dev/restore-check.yml -e phase=after
+          dev/ha-exec.sh ./verify
+
+      - name: Lose a node, put a fresh machine in its place, then check the cluster
+        run: |
+          dev/ha-wipe-node.sh kc-node3
+          dev/ha-exec.sh ./replace-node kc-node3 --yes
           dev/ha-exec.sh ./verify
 
       - name: Collect node logs

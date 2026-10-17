@@ -267,6 +267,14 @@ ANSIBLE_VAULT_PASSWORD_FILE=inventory/.vault_pass ansible-vault view inventory/g
   `./renew-certs`: new certificates from the same CAs, loaded by each service without downtime,
   checked port by port. CI renews them on a running three-node cluster. With `tls_mode: custom`,
   replace the files, re-run `./configure` and `./install`.
+- **A node's machine is lost** (dead disk, host that will not boot): give the new machine the
+  old node's address and SSH access for `ssh_user`, then `./replace-node <node name>`. It checks
+  that the other nodes are healthy, swaps the etcd member, installs the node, lets PostgreSQL
+  clone itself from the leader and starts Keycloak; users keep logging in through the other
+  nodes. If the old machine still runs, its services are stopped and their data is moved
+  aside (`*.before-replace-<time>`). CI kills a node of a running three-node cluster, starts
+  a blank machine in its place and replaces it. Not for the first node, which holds the
+  internal CA, backup repository 1 and monitoring; a new address is not scripted either.
 - **Security fixes upstream:** see the [CVE policy](CVE-POLICY.md).
 
 ## Known gaps
@@ -276,6 +284,8 @@ Stated plainly, so you can plan around them:
 - Certificates are not renewed on a schedule: you run `./renew-certs` when warned. Replacing a
   CA (ten years) is not scripted.
 - Ubuntu 24.04, Rocky Linux 9 and AlmaLinux 9 are tested; RHEL 9 is not in CI.
+- `./replace-node` replaces the second or third node at the same address; replacing the first
+  node, or moving a node to a new address, is not scripted.
 - Monitoring and repository 1 live on the first node. Losing it stops backups and alerting until
   it returns; `backup_s3` keeps the backups safe, nothing yet keeps alerting up.
 - Prometheus and Grafana listen on all interfaces; restrict them with your firewall.
