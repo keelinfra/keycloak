@@ -1,0 +1,19 @@
+playbooks/verify.yml
+  s_afbdbd0619a716::t_1010cf45388e6e 345,470
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c3b97d21967615060b48c71797566b0ec265fdab",
+  "prompts": {},
+  "sessions": {
+    "s_afbdbd0619a716": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "42e64b79-77f4-48d4-a04f-7e3155c1d20a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Xianpeng Shen <xianpeng.shen@gmail.com>"
+    }
+  }
+}
