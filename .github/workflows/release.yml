@@ -1,0 +1,72 @@
+---
+name: release
+# Publishes a release of the distribution itself when a version tag
+# (vMAJOR.MINOR.PATCH) is pushed: the source tarball, its SBOM, checksums,
+# and signed attestations that both came from this workflow at that tag.
+# Keycloak server builds have their own workflow (lts-release.yml).
+#
+# What each release carries, and why, is in CRA.md.
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write
+  # Signed build-provenance and SBOM attestations (Sigstore, via GitHub).
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    name: ${{ github.ref_name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Build tarball, SBOM and checksums
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          name="keelinfra-keycloak-$ver"
+          echo "VER=$ver" >> "$GITHUB_ENV"
+          echo "NAME=$name" >> "$GITHUB_ENV"
+          mkdir dist
+          git archive --format=tar.gz --prefix="$name/" -o "dist/$name.tar.gz" "$GITHUB_SHA"
+          python3 .github/scripts/distro_sbom.py "$ver" > "dist/$name.cdx.json"
+          cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+
+      # Anyone can check a download came from this workflow, unmodified:
+      #   gh attestation verify keelinfra-keycloak-<version>.tar.gz --repo keelinfra/keycloak
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: dist/${{ env.NAME }}.tar.gz
+
+      - name: Attest SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: dist/${{ env.NAME }}.tar.gz
+          sbom-path: dist/${{ env.NAME }}.cdx.json
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          {
+            echo "keelinfra Keycloak distribution $VER."
+            echo
+            echo "- Upgrade notes: [UPGRADES.md](https://github.com/$REPO/blob/$GITHUB_REF_NAME/UPGRADES.md)"
+            echo "- SBOM (CycloneDX): \`$NAME.cdx.json\`"
+            echo "- Security support and vulnerability handling: [SECURITY.md](https://github.com/$REPO/blob/main/SECURITY.md), [CRA.md](https://github.com/$REPO/blob/main/CRA.md)"
+            echo
+            echo "Verify a download against \`SHA256SUMS\`, or check it came unmodified from this workflow:"
+            echo
+            echo '```'
+            echo "gh attestation verify $NAME.tar.gz --repo $REPO"
+            echo '```'
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "keelinfra Keycloak distribution $VER" \
+            --notes-file notes.md --verify-tag

@@ -93,6 +93,10 @@ The distribution is free and open source. A yearly subscription adds [CVE tracki
 
 CVE tracking means notification, impact analysis against your configuration, and help upgrading along a drilled path — **not** backported patches. [CVE-POLICY.md](CVE-POLICY.md) states the boundary, and works through what "20 CVEs" actually meant for two recent releases.
 
+## Security
+
+Report vulnerabilities privately: [SECURITY.md](SECURITY.md). Releases from October 2026 on carry a CycloneDX SBOM and signed attestations you can check with `gh attestation verify`; how that and our vulnerability handling line up with the EU Cyber Resilience Act is in [CRA.md](CRA.md).
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).

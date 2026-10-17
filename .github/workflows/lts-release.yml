@@ -26,6 +26,9 @@ on:
 
 permissions:
   contents: write
+  # Signed build-provenance and SBOM attestations (Sigstore, via GitHub).
+  id-token: write
+  attestations: write
 
 jobs:
   build-and-release:
@@ -36,9 +39,9 @@ jobs:
       TAG: ${{ inputs.tag }}
       REV: ${{ inputs.revision }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad  # v6.1.0
         with:
           distribution: temurin
           java-version: "21"
@@ -46,11 +49,12 @@ jobs:
       - name: Build server distribution from upstream tag
         run: ./lts/build-from-tag.sh "$TAG" "$RUNNER_TEMP/lts"
 
-      - name: Collect artifacts and checksums
+      - name: Collect artifacts, SBOM and checksums
         run: |
           mkdir dist
           cp "$RUNNER_TEMP/lts/kc-$TAG/quarkus/dist/target/keycloak-$TAG.tar.gz" dist/
           cp "$RUNNER_TEMP/lts/kc-$TAG/quarkus/dist/target/keycloak-$TAG.zip" dist/
+          cp "$RUNNER_TEMP/lts/kc-$TAG/quarkus/dist/target/keycloak-$TAG.cdx.json" dist/
           cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS
 
       - name: Smoke-test the built distribution
@@ -67,6 +71,23 @@ jobs:
           curl -sf http://127.0.0.1:8080/realms/master/.well-known/openid-configuration > /dev/null
           kill %1
 
+      # Anyone can check a download came from this workflow run, unmodified:
+      #   gh attestation verify keycloak-<tag>.tar.gz --repo keelinfra/keycloak
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: |
+            dist/keycloak-${{ inputs.tag }}.tar.gz
+            dist/keycloak-${{ inputs.tag }}.zip
+
+      - name: Attest SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: |
+            dist/keycloak-${{ inputs.tag }}.tar.gz
+            dist/keycloak-${{ inputs.tag }}.zip
+          sbom-path: dist/keycloak-${{ inputs.tag }}.cdx.json
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -75,7 +96,9 @@ jobs:
           {
             echo "Keycloak server distribution built from the upstream git tag \`$TAG\` with [\`lts/build-from-tag.sh\`](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/lts/build-from-tag.sh) — an upstream maintenance tag with no published community artifacts (see [why](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/lts/VERIFICATION-26.2.9.md))."
             echo
-            echo "Built on this run from unmodified upstream sources; smoke-tested (version, health, OIDC discovery) before publishing. Verify downloads against \`SHA256SUMS\`."
+            echo "Built on this run from unmodified upstream sources; smoke-tested (version, health, OIDC discovery) before publishing. Verify downloads against \`SHA256SUMS\`, or check that they came unmodified from this workflow with \`gh attestation verify keycloak-$TAG.tar.gz --repo ${{ github.repository }}\`."
+            echo
+            echo "SBOM (CycloneDX): \`keycloak-$TAG.cdx.json\`. Security support and how we handle vulnerabilities: [SECURITY.md](https://github.com/${{ github.repository }}/blob/main/SECURITY.md), [CRA.md](https://github.com/${{ github.repository }}/blob/main/CRA.md)."
             echo
             echo "Install with the distribution by setting:"
             echo
