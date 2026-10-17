@@ -93,12 +93,12 @@ jobs:
         run: |
           fail=0
           for i in 1 2 3; do
-            ssh="ssh -q -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-              -i .dev/vm/id_ed25519 rocky@192.168.123.1$i"
-            mode="$(sudo $ssh getenforce)"
+            ssh=(ssh -q -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+              -i .dev/vm/id_ed25519 "rocky@192.168.123.1$i")
+            mode="$(sudo "${ssh[@]}" getenforce)"
             echo "kc-vm$i: $mode"
             [[ "$mode" == Enforcing ]] || fail=1
-            denials="$(sudo $ssh 'sudo ausearch -m AVC,USER_AVC -ts boot -i 2>/dev/null' || true)"
+            denials="$(sudo "${ssh[@]}" 'sudo ausearch -m AVC,USER_AVC -ts boot -i 2>/dev/null' || true)"
             if [[ -n "$denials" ]]; then echo "$denials"; fail=1; fi
           done
           exit "$fail"

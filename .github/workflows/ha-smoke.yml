@@ -79,6 +79,7 @@ jobs:
         run: |
           dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
             ansible-playbook dev/restore-check.yml -e phase=before
+          # shellcheck disable=SC2016 # $(...) runs inside the container, not here
           dev/ha-exec.sh bash -c './restore --yes --time "$(cat /tmp/keelinfra-restore-time)"'
           dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
             ansible-playbook dev/restore-check.yml -e phase=after
@@ -166,6 +167,7 @@ jobs:
         run: |
           dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
             ansible-playbook dev/restore-check.yml -e phase=before
+          # shellcheck disable=SC2016 # $(...) runs inside the container, not here
           dev/ha-exec.sh bash -c './restore --yes --time "$(cat /tmp/keelinfra-restore-time)"'
           dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
             ansible-playbook dev/restore-check.yml -e phase=after
