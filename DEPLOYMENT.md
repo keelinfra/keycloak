@@ -218,8 +218,27 @@ again; to go back instead, move `<data dir>.before-restore-<time>` back into pla
 and start `patroni`, then `keycloak`. CI writes a row, drops it, restores to the moment in
 between and checks the row is back, on three nodes, whenever the roles change.
 
-`./restore` needs the nodes and the repositories to be there. **Not scripted:** rebuilding after
-losing every node, where a fresh install would have to adopt the existing backups.
+`./restore` needs the nodes and the repositories to be there.
+
+**Every node lost at once** (a data centre outage, a deleted group of VMs): repository 1 went with
+the first node, so the off-site bucket (`backup_s3`) is what is left, together with the cluster
+definition and its vault in `inventory/` on your control machine. Keep a copy of `inventory/`
+somewhere other than the nodes. Give blank machines the old addresses and SSH access for
+`ssh_user`, then:
+
+```bash
+./rebuild                                     # newest backup in the bucket + all its WAL
+./rebuild --time "2026-10-17 09:30:00+00"     # or the state at that moment
+```
+
+It asks you to type the cluster name and refuses if any node still has a database. It installs
+every node as `./install` does, restores the bucket's backup on the first node and replays its WAL,
+lets the other nodes clone from it, starts Keycloak (realm files are not applied again: the
+restored database is the truth) and takes a full backup. Changes from the last minute before the
+loss can be missing: WAL goes to the bucket at least every 60 seconds (`archive_timeout`). The
+internal CA is new, so the internal certificates are new too. CI writes a row, wipes all three
+nodes, rebuilds from the bucket and checks the row is back, on three nodes, whenever the roles
+change.
 
 ## Monitoring and alerts
 
@@ -289,7 +308,7 @@ Stated plainly, so you can plan around them:
 - Monitoring and repository 1 live on the first node. Losing it stops backups and alerting until
   it returns; `backup_s3` keeps the backups safe, nothing yet keeps alerting up.
 - Prometheus and Grafana listen on all interfaces; restrict them with your firewall.
-- No scripted rebuild after losing every node (see Backups); `./restore` covers a database that
-  is wrong, on nodes that are still there.
+- `./rebuild` after losing every node needs the off-site bucket; a cluster without `backup_s3`
+  has no backup left once the first node is gone.
 - Growing a single node into a 3-node cluster means a fresh install plus a realm import.
 - Offline bundles exist for Ubuntu 24.04 and Rocky Linux 9.

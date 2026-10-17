@@ -1,0 +1,47 @@
+---
+# CI check for ./rebuild: write a row and archive its WAL, lose every node,
+# rebuild from the bucket, and the row must be back.
+#   ansible-playbook dev/rebuild-check.yml -e phase=before
+#   (wipe every node) ./rebuild --yes
+#   ansible-playbook dev/rebuild-check.yml -e phase=after
+- name: Rebuild check
+  hosts: postgres
+  gather_facts: false
+  tasks:
+    - name: Find the leader
+      ansible.builtin.command:
+        cmd: patronictl -c /etc/patroni/config.yml list -f json
+      register: members
+      changed_when: false
+      run_once: true
+
+    - name: Remember the leader
+      ansible.builtin.set_fact:
+        leader: "{{ members.stdout | from_json | selectattr('Role', 'equalto', 'Leader') | map(attribute='Member') | first }}"
+      run_once: true
+
+    - name: Before the rebuild
+      when: phase == 'before' and inventory_hostname == leader
+      become: true
+      become_user: postgres
+      block:
+        - name: Write a row after the last backup
+          community.postgresql.postgresql_query:
+            login_db: postgres
+            query: CREATE TABLE keelinfra_rebuild_check (note text); INSERT INTO keelinfra_rebuild_check VALUES ('before');
+          changed_when: true
+
+        - name: Archive the WAL with the row in it
+          ansible.builtin.command:
+            cmd: pgbackrest --stanza=main check
+          changed_when: false
+
+    - name: After the rebuild, the row is back
+      when: phase == 'after' and inventory_hostname == leader
+      become: true
+      become_user: postgres
+      community.postgresql.postgresql_query:
+        login_db: postgres
+        query: SELECT note FROM keelinfra_rebuild_check
+      register: rebuilt_row
+      failed_when: rebuilt_row.query_result | map(attribute='note') | list != ['before']

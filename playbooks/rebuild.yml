@@ -1,0 +1,178 @@
+---
+# keelinfra/keycloak — rebuild the whole cluster from the off-site backup.
+#
+# For a cluster that is gone: every node lost or wiped at once (a data
+# centre outage, a deleted VM group, ransomware). The first node's backup
+# repository went with it, so this restores from the bucket (repo2).
+# The cluster definition and its secrets (inventory/, kept on the machine
+# you run this from) and blank machines at the same addresses are all it
+# needs. For a database that is wrong on a running cluster, use ./restore;
+# for one lost node, ./replace-node.
+#
+#  1. Refuse if any node still has a PostgreSQL data directory.
+#  2. Install the base system, certificates (a new internal CA) and etcd.
+#  3. On the first node: restore the newest backup from the bucket and
+#     replay its WAL, then start Patroni there as the leader.
+#  4. Start the other nodes; they clone from it. Then HAProxy, pgBackRest,
+#     Keycloak, the VIP and monitoring, as ./install does. Realm files are
+#     not applied again: the restored database is the truth.
+#  5. Take a full backup in the bucket.
+#
+# Run through ./rebuild, which asks for confirmation.
+
+- name: Check the rebuild request
+  hosts: cluster
+  gather_facts: false
+  tasks:
+    - name: The rebuild was confirmed
+      ansible.builtin.assert:
+        that: rebuild_confirmed | default('') == cluster_name
+        fail_msg: >-
+          ./rebuild installs every node from scratch and restores the database from the
+          off-site backup. Run it through ./rebuild, which asks for confirmation.
+        quiet: true
+      run_once: true
+
+    - name: The cluster has an off-site backup
+      ansible.builtin.assert:
+        that: backup_s3 | default({}) | length > 0
+        fail_msg: >-
+          ./rebuild restores from the off-site bucket (backup_s3 in the cluster definition),
+          and this cluster has none. The only backups were on the first node.
+        quiet: true
+      run_once: true
+
+    - name: Look for a PostgreSQL data directory
+      ansible.builtin.stat:
+        path: "{{ postgres_data_dir }}/PG_VERSION"
+      register: pg_version_file
+      when: inventory_hostname in groups['postgres']
+
+    - name: No node has a database left
+      ansible.builtin.assert:
+        that: not (pg_version_file.stat.exists | default(false))
+        fail_msg: >-
+          {{ inventory_hostname }} still has a database in {{ postgres_data_dir }}. ./rebuild
+          is for a cluster whose every node is gone. For a database that is wrong, use
+          ./restore; for one lost node, ./replace-node.
+        quiet: true
+
+- name: Preflight
+  ansible.builtin.import_playbook: preflight.yml
+
+- name: Prepare all nodes
+  hosts: cluster
+  roles:
+    - common
+
+- name: Deploy TLS material
+  hosts: cluster
+  roles:
+    - tls
+
+- name: Deploy etcd cluster
+  hosts: etcd
+  roles:
+    - etcd
+
+- name: Restore the database on the first node
+  hosts: backup_repo
+  vars:
+    restore_repo: 2
+    restore_time: ""
+  tasks:
+    - name: Install PostgreSQL and Patroni
+      ansible.builtin.include_role:
+        name: postgres
+        tasks_from: "install-{{ ansible_os_family }}.yml"
+
+    - name: Install and configure pgBackRest
+      ansible.builtin.include_role:
+        name: pgbackrest
+        tasks_from: config.yml
+
+    - name: The bucket holds a backup to restore
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: pgbackrest --stanza=main --repo=2 info --output=json
+      register: rebuild_info
+      changed_when: false
+      failed_when: >-
+        rebuild_info.rc != 0
+        or (rebuild_info.stdout | from_json)[0].backup | default([]) | length == 0
+
+    - name: Restore the backup and replay the WAL
+      ansible.builtin.include_tasks: tasks/recover_from_backup.yml
+
+    # Patroni finds a data directory and no cluster in etcd: it takes the
+    # data as it is and leads.
+    - name: Start Patroni on the restored database
+      ansible.builtin.include_role:
+        name: postgres
+
+# Only now: a node starting Patroni before the first one leads would
+# create a new, empty database of its own.
+- name: Start the other database nodes; they clone from the first
+  hosts: postgres
+  roles:
+    - postgres
+  post_tasks:
+    - name: Wait until every member is running
+      ansible.builtin.command:
+        cmd: patronictl -c /etc/patroni/config.yml list -f json
+      register: members
+      until: >-
+        (members.stdout | from_json | length) == groups['postgres'] | length
+        and (members.stdout | from_json | rejectattr('State', 'in', ['running', 'streaming']) | list | length) == 0
+      retries: 360
+      delay: 5
+      changed_when: false
+      run_once: true
+
+- name: Deploy HAProxy
+  hosts: haproxy
+  roles:
+    - haproxy
+
+- name: Deploy pgBackRest
+  hosts: postgres
+  roles:
+    - pgbackrest
+
+- name: Deploy Keycloak cluster
+  hosts: keycloak
+  roles:
+    - keycloak
+
+- name: Deploy VIP (only when a vip is configured)
+  hosts: haproxy
+  roles:
+    - role: keepalived
+      when: cluster_vip | length > 0
+
+- name: Deploy monitoring
+  hosts: cluster
+  roles:
+    - monitoring
+
+# The restored database is on a new timeline, and its first WAL was not
+# archived (Patroni starts with archiving off until pgBackRest is set up).
+# The first node's repository got its first backup from the pgbackrest
+# role; a full backup in the bucket makes it whole again too.
+- name: Back up the rebuilt cluster
+  hosts: backup_repo
+  gather_facts: false
+  tasks:
+    - name: Take a full backup in the bucket
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: pgbackrest --stanza=main --repo=2 --type=full backup
+      changed_when: true
+
+    - name: Done
+      ansible.builtin.debug:
+        msg: >-
+          Rebuilt from the off-site backup. The internal CA is new; your own certificate,
+          if you configured one, is installed as before. Run ./verify next.
