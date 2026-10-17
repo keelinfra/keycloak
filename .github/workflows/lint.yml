@@ -13,13 +13,13 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Install linters
-        run: pip install ansible-core ansible-lint yamllint
-      - name: Install collections
-        run: ansible-galaxy collection install -r requirements.yml
-      - name: yamllint
-        run: yamllint .
-      - name: ansible-lint
-        run: ansible-lint
-      - name: shellcheck
-        run: shellcheck configure install preflight upgrade verify restore renew-certs replace-node dev/*.sh dev/containers/*.sh bundle/*.sh
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Install pre-commit
+        run: pip install pre-commit
+      # The hooks in .pre-commit-config.yaml: file hygiene, yamllint, ruff,
+      # ansible-lint (production profile) and shellcheck (the runner's own).
+      - name: pre-commit
+        run: pre-commit run --all-files --show-diff-on-failure

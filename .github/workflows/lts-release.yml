@@ -59,7 +59,7 @@ jobs:
           "$RUNNER_TEMP/keycloak-$TAG/bin/kc.sh" --version | grep -F "Keycloak $TAG"
           KC_BOOTSTRAP_ADMIN_USERNAME=admin KC_BOOTSTRAP_ADMIN_PASSWORD=ci-smoke-only \
             "$RUNNER_TEMP/keycloak-$TAG/bin/kc.sh" start-dev --health-enabled=true &
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             sleep 2
             curl -sf http://127.0.0.1:9000/health/ready > /dev/null && break
           done
