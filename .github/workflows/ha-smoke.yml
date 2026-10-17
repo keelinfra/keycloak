@@ -116,6 +116,7 @@ jobs:
 
       - name: Collect node logs
         if: always()
+        timeout-minutes: 5
         run: dev/ha-logs.sh .dev/containers/artifacts
 
       - uses: actions/upload-artifact@v7
@@ -213,6 +214,7 @@ jobs:
 
       - name: Collect node logs
         if: always()
+        timeout-minutes: 5
         run: dev/ha-logs.sh .dev/containers/artifacts
 
       - uses: actions/upload-artifact@v7
