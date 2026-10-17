@@ -5,6 +5,7 @@ keycloak_domain: {{ cfg.domain }}
 keycloak_version: "{{ cfg.keycloak_version }}"
 cluster_vip: "{{ cfg.vip | default('') }}"
 tls_mode: {{ cfg.tls_mode | default('selfsigned') }}
+internal_tls: {{ cfg.internal_tls | default(true) | bool | lower }}
 {% if cfg.tls_mode | default('selfsigned') == 'custom' %}
 tls_cert_file: "{{ tls_paths.cert }}"
 tls_key_file: "{{ tls_paths.key }}"

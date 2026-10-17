@@ -48,14 +48,15 @@ What survives what, on a 3-node cluster:
 
 ## Before you start
 
-**Nodes.** Three machines running Ubuntu 24.04 (the only OS tested in CI; the roles use apt).
+**Nodes.** Three machines running Ubuntu 24.04, Rocky Linux 9 or AlmaLinux 9 (all tested in CI;
+RHEL 9 takes the same path but is not in CI).
 For evaluation, 4 GB RAM and 2 vCPU per node is enough. The defaults size Keycloak's heap at
 512 MB to 1 GB and PostgreSQL's shared buffers at 512 MB; for production, size to your login
 volume and watch the dashboard.
 
 **Control machine.** Your laptop or a jump host with `ansible-core`, SSH access to every node as
-a user with passwordless sudo, and outbound internet (the nodes download Keycloak, PostgreSQL,
-Grafana and the rest from upstream during install).
+a user with passwordless sudo. The nodes download Keycloak, PostgreSQL, Grafana and the rest from
+upstream during install, unless you install from an offline bundle ([bundle/README.md](bundle/README.md)).
 
 **DNS and certificate.** A name for the service (say `sso.example.com`). Either let the install
 generate a private CA (`tls_mode: selfsigned`), or bring a certificate for that name
@@ -67,7 +68,7 @@ generate a private CA (`tls_mode: selfsigned`), or bring a certificate for that 
 |---|---|---|
 | Users | every node (or the VIP / your load balancer) | 443 |
 | Control machine | every node | 22 |
-| Every node | every node | 22, 2379, 2380, 5432, 7800, 8008, 8443, 9000 |
+| Every node | every node | 22, 2379, 2380, 5432, 7800, 8008, 8443, 9000, 57800 |
 | First node | every node | 9100, 9187 (scrapes) |
 | Operators | first node | 3000 (Grafana), 9090 (Prometheus) |
 | Operators | every node | 8404 (HAProxy stats, password in the vault) |
@@ -76,9 +77,21 @@ generate a private CA (`tls_mode: selfsigned`), or bring a certificate for that 
 Prometheus (9090) and Grafana (3000) listen on all interfaces. Prometheus has no login, so keep
 both reachable only from your operators' network.
 
-**Traffic between the nodes is not encrypted yet.** etcd, PostgreSQL replication, the Patroni API
-and Keycloak's cluster traffic travel in plaintext between the nodes. Put the three nodes on a
-private network you trust. Encrypting this traffic is on the roadmap.
+**Traffic between the nodes is encrypted.** The install creates a cluster-internal CA on the
+first node and gives every node its own certificate from it. etcd (clients and peers), the
+Patroni API, PostgreSQL (replication and Keycloak's connections) and the exporters Prometheus
+scrapes all use TLS, and etcd and the exporters only answer clients holding a certificate from
+that CA. PostgreSQL refuses unencrypted connections from the nodes. Keycloak encrypts its own
+cluster traffic (port 7800) with mutual TLS. `./verify` checks every one of these ports on every
+node and fails if one answers in plaintext. One port stays plain: 57800, where Keycloak's
+cluster checks that the other nodes are alive. It carries those messages only (node names and addresses), no user,
+session or database data. The internal CA's key never leaves the first node
+(`/etc/keelinfra/tls/internal/ca/`); node certificates are valid for two years.
+
+Clusters installed before this have `internal_tls` unset and keep running as they were. etcd
+cannot move to TLS in place, so `./install` stops (in preflight, before changing anything) if
+`./configure` now asks for TLS on such a cluster. Either set `internal_tls: false` in the cluster
+definition and re-run `./configure`, or install a new cluster and move the realms to it.
 
 ## 1. Describe the cluster
 
@@ -236,11 +249,12 @@ ANSIBLE_VAULT_PASSWORD_FILE=inventory/.vault_pass ansible-vault view inventory/g
 
 Stated plainly, so you can plan around them:
 
-- Traffic between the nodes is not encrypted (see Network above).
-- Ubuntu 24.04 only. The roles use apt; RHEL and Rocky are not supported.
+- Internal certificates are not renewed automatically. They last two years; `./verify` does
+  not yet warn before they expire.
+- Ubuntu 24.04, Rocky Linux 9 and AlmaLinux 9 are tested; RHEL 9 is not in CI.
 - Monitoring and repository 1 live on the first node. Losing it stops backups and alerting until
   it returns; `backup_s3` keeps the backups safe, nothing yet keeps alerting up.
 - Prometheus and Grafana listen on all interfaces; restrict them with your firewall.
 - No scripted restore over a live cluster (see Backups).
 - Growing a single node into a 3-node cluster means a fresh install plus a realm import.
-- Install needs outbound internet. An offline bundle is planned, not available.
+- Offline bundles exist for Ubuntu 24.04 and Rocky Linux 9.

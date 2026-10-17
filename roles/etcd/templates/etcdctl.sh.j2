@@ -1,0 +1,12 @@
+# Managed by keelinfra — etcdctl defaults for root's login shells
+{% set scheme = 'https' if internal_tls | default(false) | bool else 'http' %}
+if [ "$(id -u)" = 0 ]; then
+  export ETCDCTL_API=3
+  export ETCDCTL_ENDPOINTS={% for node in cluster_nodes %}{{ scheme }}://{{ node.host }}:{{ etcd_client_port }}{% if not loop.last %},{% endif %}{% endfor %}
+
+{% if internal_tls | default(false) | bool %}
+  export ETCDCTL_CACERT={{ internal_ca_file }}
+  export ETCDCTL_CERT={{ internal_cert_file }}
+  export ETCDCTL_KEY={{ internal_key_file }}
+{% endif %}
+fi

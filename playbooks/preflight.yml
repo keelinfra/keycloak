@@ -113,6 +113,27 @@
         - ansible_host not in ansible_all_ipv4_addresses
         - ansible_host is not match('^127\.')
 
+    # etcd cannot switch its peers from plain to TLS by a restart, so a
+    # cluster installed before internal TLS keeps running without it.
+    - name: Read an existing etcd configuration
+      ansible.builtin.slurp:
+        src: /etc/etcd/etcd.env
+      register: pf_etcd_env
+      failed_when: false
+      when: internal_tls | default(false) | bool
+
+    - name: Check an existing cluster can take internal TLS
+      ansible.builtin.set_fact:
+        pf_fail: >-
+          {{ pf_fail + ['etcd on this node was installed without internal TLS, and etcd cannot move'
+             ~ ' to it in place. Set internal_tls: false in the cluster definition and run'
+             ~ ' ./configure again to keep this cluster as it is, or install a new cluster'
+             ~ ' and move the realms to it (DEPLOYMENT.md, Network)'] }}
+      when:
+        - internal_tls | default(false) | bool
+        - pf_etcd_env.content is defined
+        - "'ETCD_LISTEN_PEER_URLS=http://' in (pf_etcd_env.content | b64decode)"
+
     - name: List listening ports
       ansible.builtin.command: ss -Htlnp
       register: pf_ss

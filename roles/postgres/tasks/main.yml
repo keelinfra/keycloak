@@ -2,6 +2,14 @@
 - name: Install PostgreSQL and Patroni
   ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
 
+# Patroni and PostgreSQL read the node's internal key (root:ssl-cert, 0640).
+- name: Let postgres read the internal TLS key
+  ansible.builtin.user:
+    name: postgres
+    groups: [ssl-cert]
+    append: true
+  when: internal_tls | default(false) | bool
+
 - name: Create patroni config directory
   ansible.builtin.file:
     path: /etc/patroni
@@ -37,7 +45,8 @@
 # here once skipped the keycloak-user creation on a slow bootstrap.
 - name: Wait for a Patroni leader to emerge
   ansible.builtin.uri:
-    url: "http://{{ ansible_host }}:{{ patroni_rest_port }}/cluster"
+    url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/cluster"
+    ca_path: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
     return_content: true
   register: patroni_cluster
   until: >-
@@ -50,7 +59,8 @@
 
 - name: Identify the current leader
   ansible.builtin.uri:
-    url: "http://{{ ansible_host }}:{{ patroni_rest_port }}/leader"
+    url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/leader"
+    ca_path: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
     status_code: [200, 503]
   register: leader_probe
   changed_when: false

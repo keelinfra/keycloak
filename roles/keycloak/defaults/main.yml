@@ -6,6 +6,11 @@ keycloak_conf_dir: /etc/keycloak
 # lts/build-from-tag.sh from an upstream maintenance tag (see lts/).
 keycloak_dist_url: "https://github.com/keycloak/keycloak/releases/download/{{ keycloak_version }}/keycloak-{{ keycloak_version }}.tar.gz"
 keycloak_heap: "-Xms512m -Xmx1024m"
-keycloak_db_url: "jdbc:postgresql://127.0.0.1:5433/keycloak"
+# Through the local HAProxy to the leader. With internal TLS the driver
+# checks the leader's certificate against the internal CA; verify-ca, not
+# verify-full, since the driver only sees 127.0.0.1.
+keycloak_db_url: >-
+  jdbc:postgresql://127.0.0.1:{{ haproxy_pg_port }}/{{ keycloak_db_name }}{{
+  ('?sslmode=verify-ca&sslrootcert=' ~ internal_ca_file) if internal_tls | default(false) | bool else '' }}
 # first node bootstraps the schema before the others start
 keycloak_first_node: "{{ groups['keycloak'][0] }}"

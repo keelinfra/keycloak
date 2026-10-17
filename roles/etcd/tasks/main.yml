@@ -6,6 +6,8 @@
     shell: /usr/sbin/nologin
     home: "{{ etcd_data_dir }}"
     create_home: false
+    groups: "{{ ['ssl-cert'] if internal_tls | default(false) | bool else omit }}"
+    append: "{{ internal_tls | default(false) | bool }}"
 
 - name: Create etcd directories
   ansible.builtin.file:
@@ -80,9 +82,21 @@
 - name: Flush handlers so the cluster forms before dependants run
   ansible.builtin.meta: flush_handlers
 
+# root's etcdctl finds the endpoints and, with internal TLS, its client
+# certificate here: `sudo -i etcdctl endpoint status -w table`.
+- name: Configure etcdctl for root
+  ansible.builtin.template:
+    src: etcdctl.sh.j2
+    dest: /etc/profile.d/keelinfra-etcdctl.sh
+    mode: "0644"
+
 - name: Wait for etcd cluster health
   ansible.builtin.command:
-    cmd: /usr/local/bin/etcdctl --endpoints=http://127.0.0.1:{{ etcd_client_port }} endpoint health
+    cmd: >-
+      /usr/local/bin/etcdctl --endpoints={{ etcd_scheme }}://127.0.0.1:{{ etcd_client_port }}
+      {% if internal_tls | default(false) | bool %}--cacert={{ internal_ca_file }}
+      --cert={{ internal_cert_file }} --key={{ internal_key_file }}{% endif %}
+      endpoint health
   register: etcd_health
   until: etcd_health.rc == 0
   retries: 12

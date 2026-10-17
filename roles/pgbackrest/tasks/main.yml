@@ -111,7 +111,8 @@
 
 - name: Point Patroni archive_command at pgBackRest
   ansible.builtin.uri:
-    url: "http://{{ ansible_host }}:{{ patroni_rest_port | default(8008) }}/config"
+    url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/config"
+    ca_path: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
     method: PATCH
     user: patroni
     password: "{{ vault_patroni_api_password }}"

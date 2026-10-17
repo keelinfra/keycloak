@@ -1,0 +1,127 @@
+---
+# Cluster-internal TLS: one private CA, and one certificate per node that
+# serves etcd, the Patroni API, PostgreSQL and the exporters, and doubles
+# as the node's client certificate towards etcd and the exporters. Made on
+# the CA host whatever tls_mode is: a customer certificate for the public
+# domain does not name the nodes. The CA key never leaves the CA host.
+- name: Create the internal TLS directory
+  ansible.builtin.file:
+    path: "{{ internal_tls_dir }}"
+    state: directory
+    owner: root
+    group: ssl-cert
+    mode: "0750"
+
+- name: Generate the internal CA and node certificates (CA host only)
+  when: inventory_hostname == tls_ca_host
+  block:
+    - name: Create the CA working directory
+      ansible.builtin.file:
+        path: "{{ internal_tls_dir }}/ca"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Generate the internal CA key
+      community.crypto.openssl_privatekey:
+        path: "{{ internal_tls_dir }}/ca/ca.key"
+        type: ECC
+        curve: secp256r1
+        mode: "0600"
+
+    - name: Generate the internal CA CSR
+      community.crypto.openssl_csr:
+        path: "{{ internal_tls_dir }}/ca/ca.csr"
+        privatekey_path: "{{ internal_tls_dir }}/ca/ca.key"
+        common_name: "{{ cluster_name }} internal CA"
+        basic_constraints: ["CA:TRUE", "pathlen:0"]
+        basic_constraints_critical: true
+        key_usage: [keyCertSign, cRLSign]
+        key_usage_critical: true
+
+    - name: Self-sign the internal CA certificate
+      community.crypto.x509_certificate:
+        path: "{{ internal_tls_dir }}/ca/ca.crt"
+        csr_path: "{{ internal_tls_dir }}/ca/ca.csr"
+        privatekey_path: "{{ internal_tls_dir }}/ca/ca.key"
+        provider: selfsigned
+        selfsigned_not_after: "+{{ tls_ca_days }}d"
+        mode: "0644"
+
+    - name: Generate node keys
+      community.crypto.openssl_privatekey:
+        path: "{{ internal_tls_dir }}/ca/{{ item.name }}.key"
+        type: ECC
+        curve: secp256r1
+        mode: "0600"
+      loop: "{{ cluster_nodes }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # The node's name and address, plus loopback for local clients
+    # (etcdctl, health checks). The VIP is listed because a node holding
+    # it may use it as the source of a connection.
+    - name: Generate node CSRs
+      community.crypto.openssl_csr:
+        path: "{{ internal_tls_dir }}/ca/{{ item.name }}.csr"
+        privatekey_path: "{{ internal_tls_dir }}/ca/{{ item.name }}.key"
+        common_name: "{{ item.name }}"
+        subject_alt_name: >-
+          {{ ['DNS:' ~ item.name, 'IP:' ~ item.host, 'DNS:localhost', 'IP:127.0.0.1']
+             + (['IP:' ~ cluster_vip] if cluster_vip | length > 0 else []) }}
+        key_usage: [digitalSignature, keyEncipherment]
+        extended_key_usage: [serverAuth, clientAuth]
+      loop: "{{ cluster_nodes }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Sign node certificates
+      community.crypto.x509_certificate:
+        path: "{{ internal_tls_dir }}/ca/{{ item.name }}.crt"
+        csr_path: "{{ internal_tls_dir }}/ca/{{ item.name }}.csr"
+        ownca_path: "{{ internal_tls_dir }}/ca/ca.crt"
+        ownca_privatekey_path: "{{ internal_tls_dir }}/ca/ca.key"
+        provider: ownca
+        ownca_not_after: "+{{ tls_cert_days }}d"
+        mode: "0644"
+      loop: "{{ cluster_nodes }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Read the internal CA and node material
+      ansible.builtin.slurp:
+        src: "{{ internal_tls_dir }}/ca/{{ item }}"
+      loop: >-
+        {{ ['ca.crt']
+           + (cluster_nodes | map(attribute='name') | map('regex_replace', '$', '.crt') | list)
+           + (cluster_nodes | map(attribute='name') | map('regex_replace', '$', '.key') | list) }}
+      register: internal_tls_material
+      no_log: true
+
+- name: Install the internal CA and this node's certificate
+  vars:
+    material: "{{ hostvars[tls_ca_host].internal_tls_material.results | items2dict(key_name='item', value_name='content') }}"
+  ansible.builtin.copy:
+    content: "{{ material[item.src] | b64decode }}"
+    dest: "{{ internal_tls_dir }}/{{ item.dest }}"
+    owner: root
+    group: ssl-cert
+    mode: "{{ item.mode }}"
+  loop:
+    - {src: ca.crt, dest: ca.crt, mode: "0644"}
+    - {src: "{{ inventory_hostname }}.crt", dest: node.crt, mode: "0644"}
+    - {src: "{{ inventory_hostname }}.key", dest: node.key, mode: "0640"}
+  loop_control:
+    label: "{{ item.dest }}"
+  no_log: true
+
+- name: Trust the internal CA system-wide
+  ansible.builtin.copy:
+    src: "{{ internal_ca_file }}"
+    dest: >-
+      {{ '/etc/pki/ca-trust/source/anchors' if ansible_os_family == 'RedHat'
+         else '/usr/local/share/ca-certificates' }}/{{ cluster_name }}-internal-ca.crt
+    remote_src: true
+    mode: "0644"
+  notify: Update CA trust store

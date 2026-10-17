@@ -6,6 +6,7 @@ common_packages:
   - gnupg
   - ca-certificates
   - python3-psycopg2   # for community.postgresql modules
+  - python3-cryptography   # community.crypto on the nodes
   - acl                # for become_user file operations
 # The same on RHEL, Rocky Linux and AlmaLinux 9. curl is left out: those
 # images ship curl-minimal, which conflicts with the full package.

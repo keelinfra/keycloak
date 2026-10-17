@@ -10,6 +10,7 @@ curl
 gnupg
 ca-certificates
 python3-psycopg2
+python3-cryptography
 acl
 # roles/keycloak
 openjdk-21-jre-headless

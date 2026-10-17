@@ -24,6 +24,18 @@ haproxy_https_port: 443
 keycloak_https_port: 8443
 keycloak_mgmt_port: 9000
 tls_dir: /etc/keelinfra/tls
+# Traffic between the nodes (etcd, Patroni API, PostgreSQL, metrics) over
+# TLS with a cluster-internal CA, separate from the certificate users see.
+# ./configure writes internal_tls: true into the inventory unless the
+# cluster file opts out. It is not defaulted here (this file would override
+# the inventory); every use reads internal_tls | default(false), which keeps
+# clusters installed before it, whose inventory lacks the setting, as they were.
+internal_tls_dir: "{{ tls_dir }}/internal"
+internal_ca_file: "{{ internal_tls_dir }}/ca.crt"
+internal_cert_file: "{{ internal_tls_dir }}/node.crt"
+internal_key_file: "{{ internal_tls_dir }}/node.key"
+etcd_scheme: "{{ 'https' if internal_tls | default(false) | bool else 'http' }}"
+patroni_api_scheme: "{{ 'https' if internal_tls | default(false) | bool else 'http' }}"
 # Never rely on the host's default `java` — CI runners preinstall several
 # JDKs with an older one on PATH. Everything JVM-based points here.
 java_home: >-
