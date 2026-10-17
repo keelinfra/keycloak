@@ -213,7 +213,9 @@ It asks you to type the cluster name, stops Keycloak and Patroni, restores on th
 replays WAL up to the target, makes that node the leader and rebuilds the others from it, starts
 Keycloak again and takes a full backup. Users cannot log in while it runs. Every node's previous
 data directory stays beside the new one (`<data dir>.before-restore-<time>`) until you delete it,
-so check the disk has room for a second copy. CI writes a row, drops it, restores to the moment in
+so check the disk has room for a second copy. If it stops partway, fix the cause and run it
+again; to go back instead, move `<data dir>.before-restore-<time>` back into place on every node
+and start `patroni`, then `keycloak`. CI writes a row, drops it, restores to the moment in
 between and checks the row is back, on three nodes, whenever the roles change.
 
 `./restore` needs the nodes and the repositories to be there. **Not scripted:** rebuilding after
