@@ -52,7 +52,7 @@ Then open `https://<your-host>/admin` and you're done. Before production, read t
 
 ## Requirements
 
-- 1 or 3 Linux nodes running Ubuntu 24.04 or Rocky Linux 9 (both tested in CI). RHEL 9 and AlmaLinux 9 take the same path as Rocky but are not in CI; Ubuntu 22.04 and Debian 12 are untested. On the RHEL family the nodes need EPEL (the roles enable it) and SELinux stays enforcing: a [weekly VM test](https://github.com/keelinfra/keycloak/actions/workflows/vm.yml) installs and drills three Rocky 9 VMs with SELinux enforcing and fails on any denial. Offline bundles cover Ubuntu 24.04 and Rocky Linux 9
+- 1 or 3 Linux nodes running Ubuntu 24.04, Rocky Linux 9 or AlmaLinux 9 (all tested in CI). RHEL 9 takes the same path but is not in CI (it needs a subscription for packages); Ubuntu 22.04 and Debian 12 are untested. On the RHEL family the nodes need EPEL (the roles enable it) and SELinux stays enforcing: a [weekly VM test](https://github.com/keelinfra/keycloak/actions/workflows/vm.yml) installs and drills three Rocky 9 VMs with SELinux enforcing and fails on any denial. Offline bundles cover Ubuntu 24.04 and Rocky Linux 9
 - SSH access with passwordless sudo
 - Internet access from the nodes, or an [offline bundle](bundle/README.md)
 - That's it — Ansible runs from the control node, nothing is pre-installed on targets

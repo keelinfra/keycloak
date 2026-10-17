@@ -8,7 +8,7 @@
     fail_msg: >-
       {{ inventory_hostname }} runs {{ ansible_distribution }} {{ ansible_distribution_version }}.
       The roles support the Debian family (Ubuntu 24.04 is tested) and RHEL,
-      Rocky Linux or AlmaLinux 9 (Rocky Linux 9 is tested).
+      Rocky Linux or AlmaLinux 9 (Rocky Linux and AlmaLinux 9 are tested).
     quiet: true
 
 - name: Note container mode

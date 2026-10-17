@@ -12,13 +12,14 @@ HA_NODES=(kc-node1 kc-node2 kc-node3)
 HA_IPS=("$HA_PREFIX.11" "$HA_PREFIX.12" "$HA_PREFIX.13")
 HA_CONTROL_IP="$HA_PREFIX.2"
 
-# Node OS: ubuntu24.04 (default) or rocky9. dev/ha-up.sh --os records it, so
+# Node OS: ubuntu24.04 (default), rocky9 or alma9. dev/ha-up.sh --os records it, so
 # the other scripts act on the rig as it was started.
 HA_OS="${HA_OS:-$(cat "$HA_STATE_DIR/os" 2>/dev/null || echo ubuntu24.04)}"
 case "$HA_OS" in
   ubuntu24.04) HA_NODE_TARGET=node;        HA_SSH_USER=ubuntu ;;
   rocky9)      HA_NODE_TARGET=node-rocky9; HA_SSH_USER=rocky ;;
-  *) echo "error: unknown node OS '$HA_OS' (ubuntu24.04 or rocky9)" >&2; exit 1 ;;
+  alma9)       HA_NODE_TARGET=node-alma9;  HA_SSH_USER=almalinux ;;
+  *) echo "error: unknown node OS '$HA_OS' (ubuntu24.04, rocky9 or alma9)" >&2; exit 1 ;;
 esac
 export HA_NODE_TARGET
 
