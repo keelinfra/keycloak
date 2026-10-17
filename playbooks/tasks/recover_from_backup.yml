@@ -1,0 +1,54 @@
+---
+# Restore a pgBackRest backup into an empty data directory on this node and
+# let PostgreSQL replay the archived WAL until it promotes, then stop it so
+# Patroni can take it over as the leader. Patroni must not be running here.
+# Included from restore.yml and rebuild.yml with restore_repo (1 or 2) and
+# restore_time ("" = as far as the archive goes).
+- name: Create an empty data directory
+  ansible.builtin.file:
+    path: "{{ postgres_data_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+
+# Without a time: the newest backup, then every archived WAL segment.
+# With one: the newest backup before it, WAL up to it, then promote.
+- name: Restore the backup
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    cmd: >-
+      pgbackrest --stanza=main --repo={{ restore_repo }} restore
+      --pg1-path={{ postgres_data_dir }}
+      {% if restore_time | length > 0 %}--type=time "--target={{ restore_time }}" --target-action=promote{% endif %}
+  changed_when: true
+
+# Nothing else starts a PostgreSQL on this data: this is the one place
+# PostgreSQL runs outside Patroni, until recovery ends.
+- name: Start PostgreSQL to replay the WAL
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    cmd: >-
+      {{ postgres_bin_dir }}/pg_ctl start -D {{ postgres_data_dir }} -w -t 600
+      -l /var/tmp/keelinfra-restore-recovery.log
+  changed_when: true
+
+- name: Wait until recovery has finished and the database is promoted
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    cmd: "{{ postgres_bin_dir }}/psql -p {{ postgres_port }} -Atc 'SELECT pg_is_in_recovery()'"
+  register: in_recovery
+  until: in_recovery.rc == 0 and in_recovery.stdout == 'f'
+  retries: 720
+  delay: 5
+  changed_when: false
+
+- name: Stop PostgreSQL before Patroni takes over
+  become: true
+  become_user: postgres
+  ansible.builtin.command:
+    cmd: "{{ postgres_bin_dir }}/pg_ctl stop -D {{ postgres_data_dir }} -m fast -w -t 300"
+  changed_when: true

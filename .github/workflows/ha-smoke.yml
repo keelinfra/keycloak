@@ -17,6 +17,7 @@ on:
       - dev/containers/**
       - dev/ha-*.sh
       - dev/restore-check.yml
+      - dev/rebuild-check.yml
       - .github/workflows/ha-smoke.yml
   pull_request:
     paths:
@@ -25,6 +26,7 @@ on:
       - dev/containers/**
       - dev/ha-*.sh
       - dev/restore-check.yml
+      - dev/rebuild-check.yml
       - .github/workflows/ha-smoke.yml
   workflow_dispatch:
 
@@ -88,6 +90,16 @@ jobs:
         run: |
           dev/ha-wipe-node.sh kc-node3
           dev/ha-exec.sh ./replace-node kc-node3 --yes
+          dev/ha-exec.sh ./verify
+
+      - name: Lose every node, rebuild the cluster from the off-site backup, then check the data and the cluster
+        run: |
+          dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
+            ansible-playbook dev/rebuild-check.yml -e phase=before
+          for n in kc-node1 kc-node2 kc-node3; do dev/ha-wipe-node.sh "$n"; done
+          dev/ha-exec.sh ./rebuild --yes
+          dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
+            ansible-playbook dev/rebuild-check.yml -e phase=after
           dev/ha-exec.sh ./verify
 
       - name: Resource use
@@ -175,6 +187,16 @@ jobs:
         run: |
           dev/ha-wipe-node.sh kc-node3
           dev/ha-exec.sh ./replace-node kc-node3 --yes
+          dev/ha-exec.sh ./verify
+
+      - name: Lose every node, rebuild the cluster from the off-site backup, then check the data and the cluster
+        run: |
+          dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
+            ansible-playbook dev/rebuild-check.yml -e phase=before
+          for n in kc-node1 kc-node2 kc-node3; do dev/ha-wipe-node.sh "$n"; done
+          dev/ha-exec.sh ./rebuild --yes
+          dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
+            ansible-playbook dev/rebuild-check.yml -e phase=after
           dev/ha-exec.sh ./verify
 
       - name: Collect node logs
