@@ -81,13 +81,15 @@
             msg: "{{ tls_probe.stdout_lines }}"
           run_once: true
 
+        # A loopback node address (single-node evaluation installs) falls
+        # under the plain local rule, which is not traffic between nodes.
         - name: Try a plaintext PostgreSQL connection to every node
           ansible.builtin.command:
             cmd: >-
               {{ postgres_bin_dir }}/psql -w -c 'SELECT 1'
               "host={{ item.host }} port={{ postgres_port }} dbname={{ keycloak_db_name }}
               user={{ keycloak_db_user }} sslmode=disable connect_timeout=5"
-          loop: "{{ cluster_nodes }}"
+          loop: "{{ cluster_nodes | rejectattr('host', 'match', '^127\\.') | list }}"
           loop_control:
             label: "{{ item.name }}"
           register: pg_plain
