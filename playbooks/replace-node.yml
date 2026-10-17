@@ -1,0 +1,220 @@
+---
+# keelinfra/keycloak — replace a node with a new machine.
+#
+# For a node whose machine is gone or broken: a dead disk, a host that will
+# not boot, a VM rebuilt from its image. The new machine takes the old one's
+# name and address from the cluster definition; the cluster keeps serving
+# from the other two nodes while it joins.
+#
+#  1. Check the rest of the cluster is healthy: etcd answers, PostgreSQL has
+#     a leader on another node.
+#  2. If the machine still runs our services, stop them and move their data
+#     aside (kept, never deleted).
+#  3. Swap the etcd member: remove the old one, announce the new one.
+#  4. Install the node: base packages, its certificates (signed on the first
+#     node, as at install), etcd joining the running cluster, Patroni
+#     cloning PostgreSQL from the leader, HAProxy, pgBackRest, Keycloak,
+#     monitoring.
+#
+# The first node is not replaceable this way: it holds the internal CA, the
+# backup repository and monitoring. Run through ./replace-node.
+
+- name: Check the replacement request
+  hosts: primary
+  gather_facts: false
+  tasks:
+    - name: The node is part of this cluster and not the first node
+      ansible.builtin.assert:
+        that:
+          - replace_node | default('') in groups['cluster']
+          - replace_node != groups['primary'][0]
+          - groups['cluster'] | length >= 3
+        fail_msg: >-
+          ./replace-node takes the name of the second or a later node of a cluster with
+          at least three nodes, as listed in the cluster definition. The first node holds
+          the internal CA, the backup repository and monitoring and is not replaced this way.
+        quiet: true
+
+    - name: The replacement was confirmed
+      ansible.builtin.assert:
+        that: replace_confirmed | default('') == replace_node
+        fail_msg: Run it through ./replace-node, which asks for confirmation.
+        quiet: true
+
+    - name: Put the node in the replace_target group for the plays below
+      ansible.builtin.add_host:
+        name: "{{ replace_node }}"
+        groups: replace_target
+      changed_when: false
+
+    - name: Etcd answers on this node
+      ansible.builtin.command:
+        cmd: >-
+          /usr/local/bin/etcdctl --endpoints={{ etcd_scheme }}://127.0.0.1:2379
+          {% if internal_tls | default(false) | bool %}--cacert={{ internal_ca_file }}
+          --cert={{ internal_cert_file }} --key={{ internal_key_file }}{% endif %}
+          endpoint health
+      changed_when: false
+
+    - name: Read the PostgreSQL cluster state
+      ansible.builtin.uri:
+        url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/cluster"
+        ca_path: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
+        return_content: true
+      register: patroni_cluster
+      changed_when: false
+
+    - name: PostgreSQL has a leader on another node
+      ansible.builtin.assert:
+        that: >-
+          patroni_cluster.json.members | selectattr('role', 'equalto', 'leader')
+          | rejectattr('name', 'equalto', replace_node) | list | length == 1
+        fail_msg: >-
+          No PostgreSQL leader outside {{ replace_node }}. Replacing a node needs the others
+          running; see RUNBOOKS.md, NoPostgresLeader.
+        quiet: true
+
+- name: Clear what is left on the machine
+  hosts: replace_target
+  gather_facts: false
+  tasks:
+    - name: Wait until the machine answers over SSH
+      ansible.builtin.wait_for_connection:
+        timeout: 120
+
+    - name: Gather facts
+      ansible.builtin.setup:
+
+    - name: Read which services exist
+      ansible.builtin.service_facts:
+
+    # A machine that still runs them: stopping Patroni here lets the leader,
+    # if it was this node, move to another one first.
+    - name: Stop keycloak, patroni and etcd
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop: [keycloak, patroni, etcd]
+      when: (item ~ '.service') in ansible_facts.services
+
+    - name: Move old etcd and PostgreSQL data aside
+      ansible.builtin.command:
+        cmd: mv {{ item }} {{ item }}.before-replace-{{ ansible_date_time.iso8601_basic_short }}
+        removes: "{{ item }}"
+      loop:
+        - "{{ etcd_data_dir | default('/var/lib/etcd') }}"
+        - "{{ postgres_data_dir }}"
+
+- name: Swap the etcd member
+  hosts: primary
+  gather_facts: false
+  vars:
+    etcdctl: >-
+      /usr/local/bin/etcdctl --endpoints={{ etcd_scheme }}://127.0.0.1:2379
+      {% if internal_tls | default(false) | bool %}--cacert={{ internal_ca_file }}
+      --cert={{ internal_cert_file }} --key={{ internal_key_file }}{% endif %}
+    peer_url: "{{ etcd_scheme }}://{{ hostvars[replace_node].ansible_host }}:{{ etcd_peer_port | default(2380) }}"
+  tasks:
+    # One line per member: ID, status, name, peer URLs, client URLs, learner.
+    # A member announced but never started has an empty name, so match on
+    # the name or the peer URL.
+    - name: List the etcd members
+      ansible.builtin.command:
+        cmd: "{{ etcdctl }} member list"
+      register: etcd_members
+      changed_when: false
+
+    - name: Remove the old member
+      ansible.builtin.command:
+        cmd: "{{ etcdctl }} member remove {{ item.split(',')[0] | trim }}"
+      loop: >-
+        {{ etcd_members.stdout_lines
+           | select('search', ', ' ~ (replace_node | regex_escape) ~ ', |' ~ (peer_url | regex_escape)) | list }}
+      changed_when: true
+
+    - name: Announce the new member
+      ansible.builtin.command:
+        cmd: "{{ etcdctl }} member add {{ replace_node }} --peer-urls={{ peer_url }}"
+      changed_when: true
+
+- name: Prepare the new machine
+  hosts: replace_target
+  roles:
+    - common
+
+# Signed on the first node, which keeps every node's key; the new machine
+# gets the same certificate the old one had.
+- name: Install its certificates
+  hosts: cluster
+  tasks:
+    - name: Run the tls role on the first node and the new machine
+      ansible.builtin.include_role:
+        name: tls
+      when: inventory_hostname in [groups['primary'][0], replace_node]
+
+- name: Join etcd, clone PostgreSQL, start HAProxy
+  hosts: replace_target
+  vars:
+    etcd_initial_cluster_state: existing
+  roles:
+    - etcd
+    - postgres
+    - haproxy
+  post_tasks:
+    - name: Wait until PostgreSQL on this node streams from the leader
+      ansible.builtin.uri:
+        url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/cluster"
+        ca_path: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
+        return_content: true
+      register: joined
+      until: >-
+        joined.status == 200
+        and (joined.json.members | selectattr('name', 'equalto', inventory_hostname)
+             | selectattr('state', 'in', ['streaming', 'running']) | list | length) == 1
+      retries: 360
+      delay: 5
+      changed_when: false
+
+# Every node: the postgres users' SSH keys and host keys are exchanged
+# between all nodes, and the new machine has new ones.
+- name: Reconnect pgBackRest
+  hosts: postgres
+  roles:
+    - pgbackrest
+
+- name: Start Keycloak and monitoring on the new machine
+  hosts: replace_target
+  tasks:
+    - name: Keycloak
+      ansible.builtin.include_role:
+        name: keycloak
+
+    - name: VIP
+      ansible.builtin.include_role:
+        name: keepalived
+      when: cluster_vip | length > 0
+
+    - name: Monitoring
+      ansible.builtin.include_role:
+        name: monitoring
+
+    # Restarts the roles queued (new configuration, certificates) run now,
+    # not after the play, so the readiness check below sees the final state.
+    - name: Apply pending restarts
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait until Keycloak on this node is ready
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ keycloak_mgmt_port }}/health/ready"
+        validate_certs: false
+        status_code: 200
+      register: kc_ready
+      until: kc_ready.status == 200
+      retries: 60
+      delay: 5
+
+    - name: Done
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} has rejoined the cluster. Run ./verify next. Data
+          moved aside on this machine, if any, is under *.before-replace-*.

@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# keelinfra/keycloak — replace-node: put a new machine in place of a lost node.
+# Usage: ./replace-node <node name> [--yes]
+# The new machine takes the old node's name and address from the cluster
+# definition, with SSH access for the ssh_user. The other nodes keep serving
+# while it joins. Not for the first node (internal CA, backups, monitoring).
+set -euo pipefail
+cd "$(dirname "$0")"
+
+NODE="" YES=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --yes) YES=true; shift ;;
+    -h|--help) sed -n '3,7p' "$0"; exit 0 ;;
+    -*) echo "unknown argument: $1" >&2; exit 1 ;;
+    *) [[ -z "$NODE" ]] || { echo "error: one node at a time" >&2; exit 1; }; NODE="$1"; shift ;;
+  esac
+done
+[[ -n "$NODE" ]] || { echo "usage: ./replace-node <node name> [--yes]" >&2; exit 1; }
+[[ "$NODE" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "error: not a node name: $NODE" >&2; exit 1; }
+[[ -f inventory/hosts.yml ]] || { echo "error: no inventory found — run ./configure first" >&2; exit 1; }
+export ANSIBLE_VAULT_PASSWORD_FILE="$PWD/inventory/.vault_pass"
+
+if ! $YES; then
+  echo "This installs $NODE from scratch on the machine at its address and joins it to the"
+  echo "cluster. If that machine still runs keelinfra services, they are stopped and their"
+  echo "data is moved aside. The other nodes keep serving."
+  read -r -p "Type the node name to continue: " answer
+  [[ "$answer" == "$NODE" ]] || { echo "cancelled" >&2; exit 1; }
+fi
+
+exec ansible-playbook playbooks/replace-node.yml -e "replace_node=$NODE" -e "replace_confirmed=$NODE"
