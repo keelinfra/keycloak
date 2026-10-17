@@ -66,6 +66,8 @@
         ownca_privatekey_path: "{{ tls_dir }}/ca.key"
         provider: ownca
         ownca_not_after: "+{{ tls_cert_days }}d"
+        # ./renew-certs: sign a new certificate even though the current one is valid
+        force: "{{ tls_renew | default(false) | bool }}"
         mode: "0644"
 
     - name: Read generated material

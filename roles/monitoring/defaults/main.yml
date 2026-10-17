@@ -11,6 +11,13 @@ alertmanager_port: 9093
 # monitoring node's own).
 exporter_web_config: "{{ internal_tls_dir }}/exporter-web.yml"
 exporter_args: "{{ '--web.config.file=' ~ exporter_web_config if internal_tls | default(false) | bool else '' }}"
+# Certificates the cert metrics script reports. Missing files (no CA with a
+# custom certificate, no internal TLS) are skipped.
+cert_metric_files:
+  server: "{{ tls_dir }}/server.crt"
+  ca: "{{ tls_dir }}/ca.crt"
+  internal: "{{ internal_cert_file }}"
+  internal_ca: "{{ internal_ca_file }}"
 # Each alert links to its section in RUNBOOKS.md (annotation runbook_url).
 alert_runbook_base: https://github.com/keelinfra/keycloak/blob/main/RUNBOOKS.md
 grafana_dashboard_dir: /var/lib/grafana/dashboards/keelinfra

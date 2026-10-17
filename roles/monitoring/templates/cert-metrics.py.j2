@@ -1,0 +1,28 @@
+#!/usr/bin/python3
+# Managed by keelinfra — export when this node's certificates expire, for the
+# Prometheus textfile collector. CertificateExpiringSoon alerts on it.
+import datetime
+import os
+
+from cryptography import x509
+
+FILES = {{ cert_metric_files | to_json }}
+OUT = "{{ textfile_dir }}/certificates.prom"
+
+lines = [
+    "# HELP keelinfra_cert_expiry_timestamp Unix time the certificate expires",
+    "# TYPE keelinfra_cert_expiry_timestamp gauge",
+]
+for name, path in FILES.items():
+    if not os.path.isfile(path):
+        continue
+    with open(path, "rb") as f:
+        cert = x509.load_pem_x509_certificate(f.read())
+    when = getattr(cert, "not_valid_after_utc", None)
+    if when is None:
+        when = cert.not_valid_after.replace(tzinfo=datetime.timezone.utc)
+    lines.append('keelinfra_cert_expiry_timestamp{cert="%s",file="%s"} %d'
+                 % (name, path, when.timestamp()))
+with open(OUT + ".tmp", "w") as f:
+    f.write("\n".join(lines) + "\n")
+os.replace(OUT + ".tmp", OUT)

@@ -110,6 +110,9 @@
           changed_when: false
           failed_when: pg_plain_sessions.query_result[0].plain | int > 0
 
+    - name: Check certificates
+      ansible.builtin.include_tasks: tasks/cert-check.yml
+
     - name: Cluster summary
       ansible.builtin.command:
         cmd: patronictl -c /etc/patroni/config.yml list
@@ -143,6 +146,7 @@
       - pgbackrest_last_backup_timestamp
       - node_filesystem_avail_bytes
       - node_cpu_seconds_total
+      - keelinfra_cert_expiry_timestamp
   tasks:
     - name: Every repository holds a backup
       become: true

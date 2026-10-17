@@ -34,6 +34,9 @@ internal_tls_dir: "{{ tls_dir }}/internal"
 internal_ca_file: "{{ internal_tls_dir }}/ca.crt"
 internal_cert_file: "{{ internal_tls_dir }}/node.crt"
 internal_key_file: "{{ internal_tls_dir }}/node.key"
+# ./verify fails, and CertificateExpiringSoon fires, when a certificate the
+# cluster uses expires within this many days.
+cert_warn_days: 30
 etcd_scheme: "{{ 'https' if internal_tls | default(false) | bool else 'http' }}"
 patroni_api_scheme: "{{ 'https' if internal_tls | default(false) | bool else 'http' }}"
 # Never rely on the host's default `java` — CI runners preinstall several

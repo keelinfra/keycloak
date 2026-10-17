@@ -86,7 +86,8 @@ cluster traffic (port 7800) with mutual TLS. `./verify` checks every one of thes
 node and fails if one answers in plaintext. One port stays plain: 57800, where Keycloak's
 cluster checks that the other nodes are alive. It carries those messages only (node names and addresses), no user,
 session or database data. The internal CA's key never leaves the first node
-(`/etc/keelinfra/tls/internal/ca/`); node certificates are valid for two years.
+(`/etc/keelinfra/tls/internal/ca/`); node certificates are valid for two years, and
+`./renew-certs` replaces them (see Day two).
 
 Clusters installed before this have `internal_tls` unset and keep running as they were. etcd
 cannot move to TLS in place, so `./install` stops (in preflight, before changing anything) if
@@ -216,6 +217,7 @@ Prometheus scrapes every node every 15 seconds. The rules that page you:
 | BackupTooOld | a repository's last backup is older than 26 hours | warning |
 | DiskAlmostFull | a root filesystem is below 15% free for 10 minutes | warning |
 | ExporterDown | host, database or etcd metrics stop arriving for 5 minutes | warning |
+| CertificateExpiringSoon | a certificate on a node expires within 30 days | warning |
 
 Alertmanager sends each alert, and its resolution, to the webhook and/or email in `alerting`,
 grouped by alert and node, repeating every 4 hours while it fires. Without `alerting`, alerts
@@ -241,16 +243,20 @@ ANSIBLE_VAULT_PASSWORD_FILE=inventory/.vault_pass ansible-vault view inventory/g
   `./configure` (with the credential variables if they changed) and `./install`. Re-running
   `./install` on a live cluster to change these settings is not covered by CI yet; do it in a
   maintenance window and run `./verify --drill all` afterwards.
-- **Certificates:** with `tls_mode: custom`, replace the files, re-run `./configure` and
-  `./install`.
+- **Certificates:** `./verify` fails, and CertificateExpiringSoon fires, 30 days before any
+  certificate on a node expires. The ones the cluster signs itself (every node's internal
+  certificate, and the HTTPS certificate with `tls_mode: selfsigned`) are renewed with
+  `./renew-certs`: new certificates from the same CAs, loaded by each service without downtime,
+  checked port by port. CI renews them on a running three-node cluster. With `tls_mode: custom`,
+  replace the files, re-run `./configure` and `./install`.
 - **Security fixes upstream:** see the [CVE policy](CVE-POLICY.md).
 
 ## Known gaps
 
 Stated plainly, so you can plan around them:
 
-- Internal certificates are not renewed automatically. They last two years; `./verify` does
-  not yet warn before they expire.
+- Certificates are not renewed on a schedule: you run `./renew-certs` when warned. Replacing a
+  CA (ten years) is not scripted.
 - Ubuntu 24.04, Rocky Linux 9 and AlmaLinux 9 are tested; RHEL 9 is not in CI.
 - Monitoring and repository 1 live on the first node. Losing it stops backups and alerting until
   it returns; `backup_s3` keeps the backups safe, nothing yet keeps alerting up.

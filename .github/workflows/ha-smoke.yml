@@ -68,6 +68,11 @@ jobs:
       - name: Drills — failover, restore from both repositories, session across a rolling restart, test alert
         run: dev/ha-exec.sh ./verify --drill all
 
+      - name: Renew every certificate on the running cluster, then check again
+        run: |
+          dev/ha-exec.sh ./renew-certs
+          dev/ha-exec.sh ./verify
+
       - name: Resource use
         if: always()
         run: |
@@ -134,6 +139,11 @@ jobs:
 
       - name: Run install a second time
         run: dev/ha-exec.sh ./install
+
+      - name: Renew every certificate on the running cluster, then check again
+        run: |
+          dev/ha-exec.sh ./renew-certs
+          dev/ha-exec.sh ./verify
 
       - name: Collect node logs
         if: always()

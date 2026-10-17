@@ -1,0 +1,57 @@
+---
+# keelinfra/keycloak — renew the certificates the cluster signs itself.
+# The CAs stay; every node gets a new certificate (and, with tls_mode:
+# selfsigned, a new HTTPS certificate), valid tls_cert_days from now.
+#
+# Who picks the new files up, and how:
+# - etcd and the exporters read their certificate files on every new
+#   connection, Prometheus its client certificate likewise: nothing to do.
+# - Patroni's REST API reloads on SIGHUP (systemctl reload patroni).
+# - PostgreSQL reloads its SSL files on pg_reload_conf().
+# - Keycloak re-reads its HTTPS certificate every hour.
+# The last play checks each port serves the new certificate.
+
+- name: Sign and distribute new certificates
+  hosts: cluster
+  vars:
+    tls_renew: true
+  roles:
+    - tls
+
+- name: Load the new certificates, one node at a time
+  hosts: postgres
+  serial: 1
+  tasks:
+    - name: Reload Patroni
+      ansible.builtin.systemd:
+        name: patroni
+        state: reloaded
+      when: internal_tls | default(false) | bool
+
+    - name: Reload PostgreSQL
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: "{{ postgres_bin_dir }}/psql -p {{ postgres_port }} -Atc 'SELECT pg_reload_conf()'"
+      changed_when: true
+      when: internal_tls | default(false) | bool
+
+    - name: Wait until this node's ports serve the new certificate
+      ansible.builtin.script:
+        cmd: >-
+          files/cert-expiry.py --cert {{ internal_cert_file }} --key {{ internal_key_file }}
+          {{ internal_cert_file }} {{ ansible_host }}:2379 {{ ansible_host }}:2380
+          {{ ansible_host }}:{{ patroni_rest_port }} {{ ansible_host }}:{{ postgres_port }}:pg
+        executable: python3
+      register: renewed
+      until: (renewed.stdout | from_json).values() | unique | list | length == 1
+      retries: 12
+      delay: 5
+      changed_when: false
+      when: internal_tls | default(false) | bool
+
+- name: Check every node's certificates
+  hosts: cluster
+  tasks:
+    - name: Check certificates
+      ansible.builtin.include_tasks: tasks/cert-check.yml

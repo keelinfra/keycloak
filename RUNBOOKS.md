@@ -241,6 +241,31 @@ alerts that depend on the missing metrics cannot fire.
 - The etcd job: etcd itself is not answering on that node; follow [EtcdNoLeader](#etcdnoleader).
 - Answers locally but not from the first node: a firewall between the nodes.
 
+## CertificateExpiringSoon
+
+**Severity:** warning. **Impact:** none yet. When the certificate expires: an internal one stops
+the nodes talking to each other (etcd, replication, failover), the HTTPS one stops users logging
+in.
+
+**Check** which file the alert names, and `./verify`, which prints every certificate's expiry on
+every node and whether each port already serves the one on disk.
+
+**Fix**
+
+- `/etc/keelinfra/tls/internal/node.crt`, or `/etc/keelinfra/tls/server.crt` with
+  `tls_mode: selfsigned`: run `./renew-certs`. It signs new certificates from the cluster's own
+  CAs, valid two years, and has each service load them without a restart. Keycloak picks up a new
+  HTTPS certificate within the hour; to switch at once, restart it one node at a time.
+- `/etc/keelinfra/tls/server.crt` with `tls_mode: custom`: your certificate. Replace the files
+  `tls_cert_file` and `tls_key_file` point to, then `./configure` and `./install`.
+- A `ca.crt`: the CA itself (valid ten years). `./renew-certs` does not replace a CA; get help.
+
+If `./verify` reports a port that still serves the old certificate after `./renew-certs`, restart
+that service on that node (`sudo systemctl restart etcd`, `patroni`, or the exporter).
+
+**Get help** for an expiring CA, or if a certificate has already expired and the nodes no longer
+reach each other.
+
 ## Not covered yet
 
 Stated plainly so you can plan around them:
@@ -253,6 +278,8 @@ Stated plainly so you can plan around them:
   repository 1. The database fails over, but alerting and local backups stop until the node
   returns; `backup_s3` keeps the backups safe.
 - **Replacing a node with a new machine.** Not scripted.
+- **Replacing a CA.** The internal CA and, with `tls_mode: selfsigned`, the HTTPS CA last ten
+  years; replacing one in a running cluster is not scripted.
 
 Subscription customers get help with any of the above, and with every runbook's "get help" case:
 https://keelinfra.io/keycloak/pricing/
