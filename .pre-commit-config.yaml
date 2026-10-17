@@ -2,9 +2,12 @@
 # Run before each commit:  pip install pre-commit && pre-commit install
 # Run on everything:       pre-commit run --all-files
 # CI (lint.yml) runs the same hooks, so a clean local run means a green lint job.
+#
+# Hooks come only from the tools' own projects, pinned to a commit (tags can
+# be moved). Update with: pre-commit autoupdate --freeze
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -16,34 +19,35 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.38.0
+    rev: cba56bcde1fdd01c1deb3f945e69764c291a6530  # frozen: v1.38.0
     hooks:
       - id: yamllint
 
-  # Shell scripts are found by their shebang, so new scripts (with or
-  # without .sh) are checked without editing a list.
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1
-    hooks:
-      - id: shellcheck
-
-  # Python: lint (ruff.toml) and format, like black
+  # Python. Rocky/Alma 9 nodes run playbooks/files/*.py on Python 3.9.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.17.1
+    rev: 38bfb07c0c64c304f47eb52090f8288150c77730  # frozen: v0.17.1
     hooks:
       - id: ruff-check
+        args: [--target-version=py39, --ignore=UP031]  # "%s" % x is fine here
       - id: ruff-format
-
-  # Also shellchecks each run: block when shellcheck is on PATH (it is in CI).
-  - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.12
-    hooks:
-      - id: actionlint
+        args: [--target-version=py39]
 
   # Last: the slowest. Installs the collections in requirements.yml itself.
   - repo: https://github.com/ansible/ansible-lint
-    rev: v26.10.1
+    rev: 9bce2bfb8f4a984e6b13767bc0d6bf0a49492164  # frozen: v26.10.1
     hooks:
       - id: ansible-lint
         # the hook asks for python3.14; use whatever python3 is installed
         language_version: python3
+
+  # Uses the shellcheck already installed (brew/apt install shellcheck; the
+  # CI runner has it), so no extra code is downloaded. Scripts are found by
+  # their shebang, with or without .sh.
+  - repo: local
+    hooks:
+      - id: shellcheck
+        name: shellcheck
+        entry: shellcheck
+        language: system
+        types: [shell]
+        require_serial: true  # one run, so sourced files (dev/containers/lib.sh) are followed

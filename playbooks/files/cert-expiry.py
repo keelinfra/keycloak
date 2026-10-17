@@ -73,7 +73,7 @@ def main(argv):
                     out[target] = not_after(f.read())
             else:
                 out[target] = served(target, cert, key)
-        except Exception as err:  # reported per target, never fatal
+        except Exception as err:  # noqa: BLE001 - reported per target, never fatal
             out[target] = "%s: %s" % (type(err).__name__, err)
     print(json.dumps(out))
 

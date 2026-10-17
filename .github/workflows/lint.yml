@@ -19,8 +19,7 @@ jobs:
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Install pre-commit
         run: pip install pre-commit
-      # The hooks in .pre-commit-config.yaml: whitespace and file hygiene,
-      # yamllint, shellcheck (every script with a shell shebang), ruff,
-      # actionlint and ansible-lint (production profile).
+      # The hooks in .pre-commit-config.yaml: file hygiene, yamllint, ruff,
+      # ansible-lint (production profile) and shellcheck (the runner's own).
       - name: pre-commit
         run: pre-commit run --all-files --show-diff-on-failure
