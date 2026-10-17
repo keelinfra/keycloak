@@ -415,7 +415,8 @@
 
         - name: Wait for a replica to take the leader key
           ansible.builtin.uri:
-            url: "http://{{ hostvars[kill_replicas | first].ansible_host }}:{{ patroni_rest_port }}/cluster"
+            url: "{{ patroni_api_scheme }}://{{ hostvars[kill_replicas | first].ansible_host }}:{{ patroni_rest_port }}/cluster"
+            ca_path: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
             return_content: true
           register: kill_cluster
           until: >-
