@@ -16,6 +16,7 @@ on:
       - playbooks/**
       - dev/containers/**
       - dev/ha-*.sh
+      - dev/restore-check.yml
       - .github/workflows/ha-smoke.yml
   pull_request:
     paths:
@@ -23,6 +24,7 @@ on:
       - playbooks/**
       - dev/containers/**
       - dev/ha-*.sh
+      - dev/restore-check.yml
       - .github/workflows/ha-smoke.yml
   workflow_dispatch:
 
@@ -71,6 +73,15 @@ jobs:
       - name: Renew every certificate on the running cluster, then check again
         run: |
           dev/ha-exec.sh ./renew-certs
+          dev/ha-exec.sh ./verify
+
+      - name: Restore the database to a point in time, then check the data and the cluster
+        run: |
+          dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
+            ansible-playbook dev/restore-check.yml -e phase=before
+          dev/ha-exec.sh bash -c './restore --yes --time "$(cat /tmp/keelinfra-restore-time)"'
+          dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
+            ansible-playbook dev/restore-check.yml -e phase=after
           dev/ha-exec.sh ./verify
 
       - name: Resource use
@@ -143,6 +154,15 @@ jobs:
       - name: Renew every certificate on the running cluster, then check again
         run: |
           dev/ha-exec.sh ./renew-certs
+          dev/ha-exec.sh ./verify
+
+      - name: Restore the database to a point in time, then check the data and the cluster
+        run: |
+          dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
+            ansible-playbook dev/restore-check.yml -e phase=before
+          dev/ha-exec.sh bash -c './restore --yes --time "$(cat /tmp/keelinfra-restore-time)"'
+          dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
+            ansible-playbook dev/restore-check.yml -e phase=after
           dev/ha-exec.sh ./verify
 
       - name: Collect node logs

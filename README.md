@@ -71,6 +71,8 @@ Every claim above is a drill you can run against your own cluster:
 
 When an alert fires, [RUNBOOKS.md](RUNBOOKS.md) says what is broken for your users, what to check and what to do, one section per alert; every alert notification links to its section.
 
+When the data itself is wrong (a deleted realm, a bad change), `./restore --time "2026-10-17 09:30:00+00"` puts the database back as it was at that moment, on every node; without `--time` it restores as close to now as the archived WAL goes. CI drops a table and restores it on three nodes.
+
 `./verify` and an alert warn 30 days before any certificate on a node expires; `./renew-certs` renews the ones the cluster signs itself, without downtime.
 
 CI runs a clean single-node install with the session and restore drills on every commit, installs a 3-node cluster and runs every drill on it whenever the roles change, and re-proves every supported upgrade path nightly — single-node, and on three nodes under load-balancer probes.
