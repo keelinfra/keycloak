@@ -13,16 +13,17 @@ conclusions from it.
 
 | container       | address        | role |
 |-----------------|----------------|------|
-| `kc-node1..3`   | 172.28.0.11–13 | cluster nodes: Ubuntu 24.04 (or Rocky Linux 9 with `--os rocky9`), systemd as PID 1, sshd |
+| `kc-node1..3`   | 172.28.0.11–13 | cluster nodes: Ubuntu 24.04 (or Rocky Linux 9 / AlmaLinux 9 with `--os rocky9` / `--os alma9`), systemd as PID 1, sshd |
 | `kc-ha-control` | 172.28.0.2     | the operator's machine: ansible-core and the collections, repo mounted at `/work` |
 
 Node images contain what the Ubuntu 24.04 cloud image ships and the roles
 rely on (python3-apt, python3-cryptography, cron, sudo, openssh-server, ...).
 Nothing the roles install themselves is pre-baked: every run is a clean
-install. The Rocky Linux 9 node (`dev/ha-up.sh --os rocky9`) is built the
-same way from what the Rocky GenericCloud image ships, with user `rocky`; its
-containers run without SELinux. Images are tagged `kc-ha-node:local` (or
-`kc-ha-node-rocky9:local`) and `kc-ha-control:local`,
+install. The Rocky Linux 9 and AlmaLinux 9 nodes (`dev/ha-up.sh --os rocky9`
+or `--os alma9`) are built the same way by `el9-node.sh`, from what the
+GenericCloud images ship, with user `rocky` or `almalinux`; their containers
+run without SELinux. Images are tagged `kc-ha-node:local` (or
+`kc-ha-node-rocky9:local`, `kc-ha-node-alma9:local`) and `kc-ha-control:local`,
 built locally or inside the CI job, and never pushed to a registry.
 
 ## Use
@@ -72,7 +73,7 @@ works (Apple silicon).
   address is the node's `host` in cluster.yml, exactly as with VMs: etcd,
   Patroni, HAProxy, JGroups and the TLS SANs bind to it.
 - `dev/ha-up.sh` generates an ssh key in `.dev/containers/`, installs it for
-  `ubuntu` (`rocky` on Rocky) on every node and runs `./configure` from the control container.
+  `ubuntu` (`rocky` on Rocky, `almalinux` on Alma) on every node and runs `./configure` from the control container.
   Ansible then reaches the nodes over ssh — the production path, not the
   Docker connection plugin — so the pgBackRest ssh mesh and host-key handling
   are exercised too.

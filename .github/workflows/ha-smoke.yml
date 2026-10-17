@@ -7,7 +7,7 @@ name: ha-smoke
 # certificate distribution, Infinispan clustering — and that a login survives
 # a rolling restart. The single-node smoke on the VM runner remains the guard
 # for what the roles need from a real machine. A second job runs the same
-# on Rocky Linux 9 nodes.
+# on Rocky Linux 9 and AlmaLinux 9 nodes.
 on:
   push:
     branches: [main]
@@ -90,15 +90,24 @@ jobs:
         if: always()
         run: dev/ha-down.sh
 
-  # The same on Rocky Linux 9 nodes: PGDG and EPEL packages, upstream
-  # Prometheus binaries, the RHEL-family paths. Containers run without
-  # SELinux, so this does not cover an enforcing host.
-  three-node-rocky9:
+  # The same on Rocky Linux 9 and AlmaLinux 9 nodes: PGDG and EPEL
+  # packages, upstream Prometheus binaries, the RHEL-family paths. Containers
+  # run without SELinux; vm.yml covers an enforcing Rocky host.
+  three-node-el9:
+    name: three-node-${{ matrix.os }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: rocky9
+            node_target: node-rocky9
+          - os: alma9
+            node_target: node-alma9
     env:
-      HA_OS: rocky9
-      HA_NODE_TARGET: node-rocky9
+      HA_OS: ${{ matrix.os }}
+      HA_NODE_TARGET: ${{ matrix.node_target }}
     steps:
       - uses: actions/checkout@v7
 
@@ -112,7 +121,7 @@ jobs:
             --set '*.cache-from=type=gha' --set '*.cache-to=type=gha,mode=max'
 
       - name: Start the rig and configure
-        run: dev/ha-up.sh --no-build --os rocky9
+        run: dev/ha-up.sh --no-build --os "$HA_OS"
 
       - name: Install
         run: dev/ha-exec.sh ./install
@@ -133,7 +142,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: ha-smoke-rocky9-logs
+          name: ha-smoke-${{ matrix.os }}-logs
           path: .dev/containers/artifacts
           retention-days: 14
           if-no-files-found: ignore

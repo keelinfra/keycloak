@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bring up the 3-node container rig and configure the repo against it.
-# Usage: dev/ha-up.sh [--version 26.8.1] [--os ubuntu24.04|rocky9] [--no-build] [--force]
+# Usage: dev/ha-up.sh [--version 26.8.1] [--os ubuntu24.04|rocky9|alma9] [--no-build] [--force]
 #                     [--offline <bundle.tar.gz>]
 # --offline cuts the nodes off from the internet and configures from a bundle
 # (bundle/build.sh); the bundle must sit inside the repo, which the control

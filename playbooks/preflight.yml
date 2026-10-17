@@ -62,10 +62,10 @@
       ansible.builtin.set_fact:
         pf_warn: >-
           {{ pf_warn + [ansible_distribution ~ ' ' ~ ansible_distribution_version
-             ~ ' takes a supported path but is not tested in CI (Ubuntu 24.04 and Rocky Linux 9 are)'] }}
+             ~ ' takes a supported path but is not tested in CI (Ubuntu 24.04, Rocky Linux 9 and AlmaLinux 9 are)'] }}
       when: >-
         (ansible_os_family == 'Debian' and not (ansible_distribution == 'Ubuntu' and ansible_distribution_version == '24.04'))
-        or (ansible_os_family == 'RedHat' and ansible_distribution in ['RedHat', 'AlmaLinux'])
+        or (ansible_os_family == 'RedHat' and ansible_distribution == 'RedHat')
 
     - name: Check the CPU architecture
       ansible.builtin.set_fact:

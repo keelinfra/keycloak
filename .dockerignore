@@ -4,3 +4,4 @@
 !requirements.yml
 !dev/containers/Dockerfile
 !dev/containers/ssh-hostkeys.service
+!dev/containers/el9-node.sh
