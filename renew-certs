@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# keelinfra/keycloak — renew-certs: sign new certificates from the cluster's
+# own CAs (internal TLS, and the HTTPS certificate with tls_mode: selfsigned),
+# put them on every node and have each service load them. No downtime.
+# A custom HTTPS certificate is yours to renew: replace the files, then
+# ./configure and ./install.
+set -euo pipefail
+cd "$(dirname "$0")"
+[[ -f inventory/hosts.yml ]] || { echo "error: no inventory found — run ./configure first" >&2; exit 1; }
+export ANSIBLE_VAULT_PASSWORD_FILE="$PWD/inventory/.vault_pass"
+exec ansible-playbook playbooks/renew-certs.yml "$@"

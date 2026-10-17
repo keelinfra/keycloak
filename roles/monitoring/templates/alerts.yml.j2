@@ -58,6 +58,14 @@ groups:
           summary: "{{ '{{ $labels.job }}' }} metrics on {{ '{{ $labels.instance }}' }} are not being scraped"
           runbook_url: "{{ alert_runbook_base }}#exporterdown"
 
+      - alert: CertificateExpiringSoon
+        expr: keelinfra_cert_expiry_timestamp - time() < {{ cert_warn_days }} * 86400
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ '{{ $labels.file }}' }} on {{ '{{ $labels.instance }}' }} expires in {{ '{{ $value | humanizeDuration }}' }}"
+          runbook_url: "{{ alert_runbook_base }}#certificateexpiringsoon"
+
       - alert: DiskAlmostFull
         expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.15
         for: 10m

@@ -1,0 +1,79 @@
+---
+# Check the certificates on this node: how long each file has left, and
+# that every port serves the certificate on disk. A port serving an older
+# one means its service has not picked up a renewal yet.
+- name: Read certificate expiry on disk and as served
+  vars:
+    cert_files: >-
+      {{ [tls_dir ~ '/server.crt']
+         + ([tls_dir ~ '/ca.crt'] if tls_mode == 'selfsigned' or tls_ca_file | default('') | length > 0 else [])
+         + ([internal_cert_file, internal_ca_file] if internal_tls | default(false) | bool else []) }}
+    internal_ports: >-
+      {{ [ansible_host ~ ':2379', ansible_host ~ ':2380', ansible_host ~ ':' ~ patroni_rest_port,
+          ansible_host ~ ':' ~ postgres_port ~ ':pg',
+          ansible_host ~ ':' ~ (node_exporter_port | default(9100)),
+          ansible_host ~ ':' ~ (postgres_exporter_port | default(9187))]
+         if internal_tls | default(false) | bool else [] }}
+  ansible.builtin.script:
+    cmd: >-
+      files/cert-expiry.py
+      {% if internal_tls | default(false) | bool %}--cert {{ internal_cert_file }} --key {{ internal_key_file }}{% endif %}
+      {{ (cert_files + internal_ports + [ansible_host ~ ':' ~ keycloak_https_port]) | join(' ') }}
+    executable: python3
+  register: cert_expiry_raw
+  changed_when: false
+
+- name: Work out what each certificate has left
+  ansible.builtin.set_fact:
+    cert_expiry: "{{ cert_expiry_raw.stdout | from_json }}"
+    cert_now: "{{ now().timestamp() | int }}"
+
+- name: Show certificate expiry
+  ansible.builtin.debug:
+    msg: >-
+      {% for k, v in cert_expiry.items() %}{{ k }} {{ ('%Y-%m-%d %H:%M' | strftime(v, utc=true)) if v is number else v }}
+      {{- '; ' if not loop.last }}{% endfor %}
+
+- name: No certificate expires soon (cert_warn_days)
+  vars:
+    renew_hint: >-
+      {{ 'To renew, replace tls_cert_file, then run ./configure and ./install.'
+         if item.key == tls_dir ~ '/server.crt' and tls_mode == 'custom'
+         else 'This is a CA, which ./renew-certs does not replace: see RUNBOOKS.md.'
+         if item.key.endswith('/ca.crt') else 'To renew, run ./renew-certs.' }}
+  ansible.builtin.assert:
+    that:
+      - item.value is number
+      - item.value - (cert_now | int) > cert_warn_days * 86400
+    fail_msg: >-
+      {{ item.key }}: {{ (('expires ' ~ ('%Y-%m-%d' | strftime(item.value, utc=true))) if item.value is number
+      else item.value) }}. {{ renew_hint }}
+    quiet: true
+  loop: "{{ cert_expiry | dict2items | selectattr('key', 'search', '/') | list }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+# Keycloak re-reads its HTTPS certificate hourly, so right after a renewal
+# 8443 may still serve the old one; that is reported, not failed.
+- name: Every port serves the certificate on disk
+  ansible.builtin.assert:
+    that: item.value == cert_expiry[internal_cert_file]
+    fail_msg: >-
+      {{ item.key }} serves a certificate expiring {{ item.value }}, the one on disk expires
+      {{ cert_expiry[internal_cert_file] }}: its service has not reloaded it. See RUNBOOKS.md, CertificateExpiringSoon.
+    quiet: true
+  loop: >-
+    {{ cert_expiry | dict2items | rejectattr('key', 'search', '/')
+       | rejectattr('key', 'search', ':' ~ keycloak_https_port ~ '$') | list }}
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Keycloak serves the certificate on disk
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'ok' if served == on_disk else
+         'Keycloak still serves the previous certificate (expires '
+         ~ ('%Y-%m-%d %H:%M' | strftime(served | int, utc=true)) ~ ' UTC); it re-reads the file within the hour.' }}
+  vars:
+    served: "{{ cert_expiry[ansible_host ~ ':' ~ keycloak_https_port] }}"
+    on_disk: "{{ cert_expiry[tls_dir ~ '/server.crt'] }}"

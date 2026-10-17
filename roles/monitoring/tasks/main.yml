@@ -68,6 +68,28 @@
     enabled: true
 
 # --- monitoring host: prometheus + grafana + backup metrics ------------
+- name: Ensure textfile collector directory exists
+  ansible.builtin.file:
+    path: "{{ textfile_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Install the certificate expiry metrics script
+  ansible.builtin.template:
+    src: cert-metrics.py.j2
+    dest: /usr/local/bin/keelinfra-cert-metrics
+    mode: "0755"
+
+- name: Schedule the certificate expiry metrics
+  ansible.builtin.copy:
+    content: "7 * * * * root /usr/local/bin/keelinfra-cert-metrics\n"
+    dest: /etc/cron.d/keelinfra-cert-metrics
+    mode: "0644"
+
+- name: Export certificate expiry once now
+  ansible.builtin.command: /usr/local/bin/keelinfra-cert-metrics
+  changed_when: false
+
 - name: Configure Prometheus
   when: inventory_hostname == monitoring_host
   block:
@@ -101,12 +123,6 @@
       ansible.builtin.template:
         src: pgbackrest-metrics.sh.j2
         dest: /usr/local/bin/pgbackrest-metrics
-        mode: "0755"
-
-    - name: Ensure textfile collector directory exists
-      ansible.builtin.file:
-        path: "{{ textfile_dir }}"
-        state: directory
         mode: "0755"
 
     - name: Schedule pgbackrest metrics export
