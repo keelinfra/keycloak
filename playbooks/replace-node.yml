@@ -198,6 +198,21 @@
       ansible.builtin.include_role:
         name: monitoring
 
+    # Restarts the roles queued (new configuration, certificates) run now,
+    # not after the play, so the readiness check below sees the final state.
+    - name: Apply pending restarts
+      ansible.builtin.meta: flush_handlers
+
+    - name: Wait until Keycloak on this node is ready
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ keycloak_mgmt_port }}/health/ready"
+        validate_certs: false
+        status_code: 200
+      register: kc_ready
+      until: kc_ready.status == 200
+      retries: 60
+      delay: 5
+
     - name: Done
       ansible.builtin.debug:
         msg: >-
