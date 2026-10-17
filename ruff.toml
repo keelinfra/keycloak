@@ -1,0 +1,9 @@
+# Python here runs on the nodes too (playbooks/files/), and Rocky/Alma 9 ship Python 3.9.
+target-version = "py39"
+line-length = 100
+
+[lint]
+# pyflakes, pycodestyle, import order, bugbear, pyupgrade, simplify
+select = ["F", "E", "W", "I", "B", "UP", "SIM"]
+# printf-style "%s" % x is fine and reads well in these short scripts
+ignore = ["UP031"]

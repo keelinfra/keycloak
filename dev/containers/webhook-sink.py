@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Alert webhook stand-in for the container rig: answers 200 to every POST
 and appends the body, one JSON document per line, to the given file."""
+
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 

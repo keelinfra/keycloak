@@ -7,6 +7,7 @@ Both matrices read .github/upgrade-paths.yml through this script:
     upgrade_paths.py --only FROM TO STRATEGY [FROM_DIST_URL] [DIST_URL]
                                      one path given by hand (workflow_dispatch)
 """
+
 import json
 import pathlib
 import sys

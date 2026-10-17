@@ -11,6 +11,7 @@ certificate a service holds, not whether to trust it.
 
 Prints one JSON object: TARGET -> expiry as Unix time, or an error string.
 """
+
 import datetime
 import json
 import os
@@ -24,8 +25,12 @@ PG_SSL_REQUEST = struct.pack("!ii", 8, 80877103)
 
 def not_after(cert):
     from cryptography import x509
-    loaded = (x509.load_der_x509_certificate(cert) if isinstance(cert, bytes)
-              else x509.load_pem_x509_certificate(cert.encode()))
+
+    loaded = (
+        x509.load_der_x509_certificate(cert)
+        if isinstance(cert, bytes)
+        else x509.load_pem_x509_certificate(cert.encode())
+    )
     when = getattr(loaded, "not_valid_after_utc", None)
     if when is None:
         when = loaded.not_valid_after.replace(tzinfo=datetime.timezone.utc)

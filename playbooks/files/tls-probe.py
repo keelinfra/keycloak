@@ -9,6 +9,8 @@ an alert record, which is enough: a server that wants a client certificate
 we do not send still proves the port speaks TLS. Prints one line per port
 and exits 1 if any port answered in plaintext or not at all.
 """
+
+import contextlib
 import socket
 import ssl
 import struct
@@ -23,10 +25,8 @@ def client_hello():
     ctx.verify_mode = ssl.CERT_NONE
     out = ssl.MemoryBIO()
     obj = ctx.wrap_bio(ssl.MemoryBIO(), out, server_side=False)
-    try:
+    with contextlib.suppress(ssl.SSLWantReadError):
         obj.do_handshake()
-    except ssl.SSLWantReadError:
-        pass
     return out.read()
 
 
