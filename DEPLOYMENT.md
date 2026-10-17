@@ -198,10 +198,28 @@ disk and retries; watch the root-filesystem alert during a long bucket outage.
 
 **What is tested:** that each repository holds a backup and that the latest one restores into a
 scratch directory (`./verify --drill restore`), on every commit for one node and on three nodes
-when the roles change. **What is not scripted yet:** restoring over the live cluster after a total
-loss. That procedure (stop Patroni everywhere, restore on one node with
-`pgbackrest --stanza=main --repo=N restore`, re-bootstrap the replicas) is documented upstream by
-pgBackRest and Patroni; keelinfra does not automate or drill it today.
+when the roles change.
+
+**Putting the database back:** `./restore` replaces the cluster's database with a backup, either as
+close to now as the archived WAL goes or as it was at a moment you name:
+
+```bash
+./restore                                     # newest backup + all archived WAL, repository 1
+./restore --time "2026-10-17 09:30:00+00"     # the state at that moment (a deleted realm, a bad change)
+./restore --repo 2                            # from the off-site bucket
+```
+
+It asks you to type the cluster name, stops Keycloak and Patroni, restores on the first node,
+replays WAL up to the target, makes that node the leader and rebuilds the others from it, starts
+Keycloak again and takes a full backup. Users cannot log in while it runs. Every node's previous
+data directory stays beside the new one (`<data dir>.before-restore-<time>`) until you delete it,
+so check the disk has room for a second copy. If it stops partway, fix the cause and run it
+again; to go back instead, move `<data dir>.before-restore-<time>` back into place on every node
+and start `patroni`, then `keycloak`. CI writes a row, drops it, restores to the moment in
+between and checks the row is back, on three nodes, whenever the roles change.
+
+`./restore` needs the nodes and the repositories to be there. **Not scripted:** rebuilding after
+losing every node, where a fresh install would have to adopt the existing backups.
 
 ## Monitoring and alerts
 
@@ -261,6 +279,7 @@ Stated plainly, so you can plan around them:
 - Monitoring and repository 1 live on the first node. Losing it stops backups and alerting until
   it returns; `backup_s3` keeps the backups safe, nothing yet keeps alerting up.
 - Prometheus and Grafana listen on all interfaces; restrict them with your firewall.
-- No scripted restore over a live cluster (see Backups).
+- No scripted rebuild after losing every node (see Backups); `./restore` covers a database that
+  is wrong, on nodes that are still there.
 - Growing a single node into a 3-node cluster means a fresh install plus a realm import.
 - Offline bundles exist for Ubuntu 24.04 and Rocky Linux 9.

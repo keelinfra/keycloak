@@ -1,0 +1,260 @@
+---
+# keelinfra/keycloak — restore the cluster's database from a pgBackRest
+# backup: to the end of the archived WAL, or to a point in time.
+#
+# For a database that is wrong, not for a cluster that is gone: a deleted
+# realm, a bad change, corruption. The nodes and the backup repositories
+# must be there; ./restore puts the database back on them.
+#
+#  1. Stop Keycloak everywhere, then Patroni (and with it PostgreSQL).
+#  2. Move every node's data directory aside (kept, never deleted) and
+#     clear Patroni's state in etcd, keeping its configuration.
+#  3. Restore the backup on the repo host, start PostgreSQL there outside
+#     Patroni and let it replay WAL up to the target and promote.
+#  4. Hand it to Patroni as the leader; the other nodes clone from it.
+#  5. Start Keycloak, take a full backup of the new timeline.
+#
+# Run through ./restore, which asks for confirmation.
+
+- name: Check the restore request
+  hosts: cluster
+  gather_facts: false
+  vars:
+    restore_repo: 1
+    restore_time: ""
+  tasks:
+    - name: The restore was confirmed
+      ansible.builtin.assert:
+        that: restore_confirmed | default('') == cluster_name
+        fail_msg: >-
+          ./restore replaces the database on every node. Run it through ./restore,
+          which asks for confirmation.
+        quiet: true
+      run_once: true
+
+    - name: The repository exists
+      ansible.builtin.assert:
+        that: restore_repo | int in ([1, 2] if backup_s3 | default({}) | length > 0 else [1])
+        fail_msg: "repository {{ restore_repo }} is not configured on this cluster"
+        quiet: true
+      run_once: true
+
+    - name: The repository holds a backup to restore
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: pgbackrest --stanza=main --repo={{ restore_repo }} info --output=json
+      register: restore_info
+      changed_when: false
+      failed_when: >-
+        restore_info.rc != 0
+        or (restore_info.stdout | from_json)[0].backup | default([]) | length == 0
+      delegate_to: "{{ groups['backup_repo'][0] }}"
+      run_once: true
+
+- name: Stop Keycloak
+  hosts: keycloak
+  gather_facts: false
+  tasks:
+    - name: Stop keycloak
+      ansible.builtin.systemd:
+        name: keycloak
+        state: stopped
+
+- name: Stop Patroni and PostgreSQL
+  hosts: postgres
+  gather_facts: true
+  tasks:
+    - name: Stop patroni
+      ansible.builtin.systemd:
+        name: patroni
+        state: stopped
+
+    - name: PostgreSQL is down
+      ansible.builtin.command:
+        cmd: "{{ postgres_bin_dir }}/pg_ctl status -D {{ postgres_data_dir }}"
+      become: true
+      become_user: postgres
+      register: pg_status
+      changed_when: false
+      failed_when: pg_status.rc not in [3, 4]
+
+    - name: Name the directory the current data moves to
+      ansible.builtin.set_fact:
+        restore_aside: "{{ postgres_data_dir }}.before-restore-{{ restore_stamp }}"
+      vars:
+        restore_stamp: "{{ hostvars[groups['postgres'][0]].ansible_date_time.iso8601_basic_short }}"
+
+    - name: Move the current data directory aside
+      ansible.builtin.command:
+        cmd: mv {{ postgres_data_dir }} {{ restore_aside }}
+        removes: "{{ postgres_data_dir }}"
+
+# Everything but /config: that holds the settings applied after bootstrap
+# (pgBackRest's archive_command among them), which the restored cluster keeps.
+- name: Clear Patroni's state in etcd
+  hosts: etcd
+  gather_facts: false
+  vars:
+    etcdctl: >-
+      /usr/local/bin/etcdctl --endpoints={{ etcd_scheme }}://127.0.0.1:2379
+      {% if internal_tls | default(false) | bool %}--cacert={{ internal_ca_file }}
+      --cert={{ internal_cert_file }} --key={{ internal_key_file }}{% endif %}
+  tasks:
+    - name: List the cluster's keys
+      ansible.builtin.command:
+        cmd: "{{ etcdctl }} get --prefix --keys-only /service/{{ cluster_name }}/"
+      register: patroni_keys
+      changed_when: false
+      run_once: true
+
+    - name: Delete every key but the configuration
+      ansible.builtin.command:
+        cmd: "{{ etcdctl }} del {{ item }}"
+      loop: >-
+        {{ patroni_keys.stdout_lines | select | reject('equalto', '/service/' ~ cluster_name ~ '/config') | list }}
+      changed_when: true
+      run_once: true
+
+- name: Restore and recover on the repo host
+  hosts: backup_repo
+  gather_facts: false
+  vars:
+    restore_repo: 1
+    restore_time: ""
+  tasks:
+    - name: Create an empty data directory
+      ansible.builtin.file:
+        path: "{{ postgres_data_dir }}"
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: "0700"
+
+    # Without a time: the newest backup, then every archived WAL segment.
+    # With one: the newest backup before it, WAL up to it, then promote.
+    - name: Restore the backup
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: >-
+          pgbackrest --stanza=main --repo={{ restore_repo }} restore
+          --pg1-path={{ postgres_data_dir }}
+          {% if restore_time | length > 0 %}--type=time "--target={{ restore_time }}" --target-action=promote{% endif %}
+      changed_when: true
+
+    # Patroni is stopped everywhere and its state is gone, so nothing else
+    # starts a PostgreSQL on this data: this is the one place PostgreSQL
+    # runs outside Patroni, until recovery ends.
+    - name: Start PostgreSQL to replay the WAL
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: >-
+          {{ postgres_bin_dir }}/pg_ctl start -D {{ postgres_data_dir }} -w -t 600
+          -l /var/tmp/keelinfra-restore-recovery.log
+      changed_when: true
+
+    - name: Wait until recovery has finished and the database is promoted
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: "{{ postgres_bin_dir }}/psql -p {{ postgres_port }} -Atc 'SELECT pg_is_in_recovery()'"
+      register: in_recovery
+      until: in_recovery.rc == 0 and in_recovery.stdout == 'f'
+      retries: 720
+      delay: 5
+      changed_when: false
+
+    - name: Stop PostgreSQL before Patroni takes over
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: "{{ postgres_bin_dir }}/pg_ctl stop -D {{ postgres_data_dir }} -m fast -w -t 300"
+      changed_when: true
+
+    - name: Start patroni on the restored node
+      ansible.builtin.systemd:
+        name: patroni
+        state: started
+
+    - name: Wait until the restored node leads
+      ansible.builtin.uri:
+        url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/primary"
+        ca_path: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
+        status_code: 200
+      register: restored_leader
+      until: restored_leader.status == 200
+      retries: 60
+      delay: 5
+
+- name: Rebuild the other nodes from the restored leader
+  hosts: postgres
+  gather_facts: false
+  tasks:
+    - name: Create an empty data directory
+      ansible.builtin.file:
+        path: "{{ postgres_data_dir }}"
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: "0700"
+      when: inventory_hostname != groups['backup_repo'][0]
+
+    - name: Start patroni
+      ansible.builtin.systemd:
+        name: patroni
+        state: started
+
+    - name: Wait until every member is running
+      ansible.builtin.command:
+        cmd: patronictl -c /etc/patroni/config.yml list -f json
+      register: members
+      until: >-
+        (members.stdout | from_json | length) == groups['postgres'] | length
+        and (members.stdout | from_json | rejectattr('State', 'in', ['running', 'streaming']) | list | length) == 0
+      retries: 120
+      delay: 5
+      changed_when: false
+      run_once: true
+
+- name: Start Keycloak
+  hosts: keycloak
+  gather_facts: false
+  serial: 1
+  tasks:
+    - name: Start keycloak
+      ansible.builtin.systemd:
+        name: keycloak
+        state: started
+
+    - name: Wait until keycloak is ready
+      ansible.builtin.uri:
+        url: "https://127.0.0.1:{{ keycloak_mgmt_port }}/health/ready"
+        validate_certs: false
+        status_code: 200
+      register: kc_ready
+      until: kc_ready.status == 200
+      retries: 60
+      delay: 5
+
+- name: Back up the restored database
+  hosts: backup_repo
+  gather_facts: false
+  vars:
+    backup_repos: "{{ [1, 2] if backup_s3 | default({}) | length > 0 else [1] }}"
+  tasks:
+    - name: Take a full backup of the new timeline
+      become: true
+      become_user: postgres
+      ansible.builtin.command:
+        cmd: pgbackrest --stanza=main --repo={{ item }} --type=full backup
+      loop: "{{ backup_repos }}"
+      changed_when: true
+
+    - name: Done
+      ansible.builtin.debug:
+        msg: >-
+          Restored. Each node's previous data directory is kept as
+          {{ postgres_data_dir }}.before-restore-*; delete it once you are satisfied.
+          Run ./verify next.

@@ -270,10 +270,9 @@ reach each other.
 
 Stated plainly so you can plan around them:
 
-- **Restoring over the live cluster after losing every node.** `./verify --drill restore` proves
-  each backup restores into a scratch directory; restoring in place (stop Patroni everywhere,
-  restore on one node with `pgbackrest --stanza=main --repo=N restore`, re-bootstrap the others)
-  is not scripted or drilled.
+- **Rebuilding after losing every node.** `./restore` puts a backup back on nodes that are still
+  there (to now, or to a point in time, see DEPLOYMENT.md, Backups). New machines in place of all
+  of them would need a fresh install that adopts the existing backups; that is not scripted.
 - **Losing the first node for good.** It holds Prometheus, Alertmanager, Grafana and backup
   repository 1. The database fails over, but alerting and local backups stop until the node
   returns; `backup_s3` keeps the backups safe.

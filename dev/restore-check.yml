@@ -1,0 +1,75 @@
+---
+# CI check for ./restore --time: write a row, note the time, drop the table,
+# restore to that time, and the row must be back.
+#   ansible-playbook dev/restore-check.yml -e phase=before   → /tmp/keelinfra-restore-time
+#   ./restore --yes --time "$(cat /tmp/keelinfra-restore-time)"
+#   ansible-playbook dev/restore-check.yml -e phase=after
+- name: Point-in-time restore check
+  hosts: postgres
+  gather_facts: false
+  tasks:
+    - name: Find the leader
+      ansible.builtin.command:
+        cmd: patronictl -c /etc/patroni/config.yml list -f json
+      register: members
+      changed_when: false
+      run_once: true
+
+    - name: Remember the leader
+      ansible.builtin.set_fact:
+        leader: "{{ members.stdout | from_json | selectattr('Role', 'equalto', 'Leader') | map(attribute='Member') | first }}"
+      run_once: true
+
+    - name: Before the restore
+      when: phase == 'before' and inventory_hostname == leader
+      become: true
+      become_user: postgres
+      block:
+        - name: Write a row
+          community.postgresql.postgresql_query:
+            login_db: postgres
+            query: CREATE TABLE keelinfra_restore_check (note text); INSERT INTO keelinfra_restore_check VALUES ('before');
+          changed_when: true
+
+        - name: Let a second pass
+          ansible.builtin.pause:
+            seconds: 2
+
+        - name: Read the restore target, after the row
+          community.postgresql.postgresql_query:
+            login_db: postgres
+            query: SELECT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || '+00' AS t
+          register: target
+
+        - name: Let another second pass
+          ansible.builtin.pause:
+            seconds: 2
+
+        - name: Drop the table, the change the restore undoes
+          community.postgresql.postgresql_query:
+            login_db: postgres
+            query: DROP TABLE keelinfra_restore_check
+          changed_when: true
+
+        - name: Archive the WAL with the drop in it
+          ansible.builtin.command:
+            cmd: pgbackrest --stanza=main check
+          changed_when: false
+
+        - name: Hand the target to ./restore
+          ansible.builtin.copy:
+            content: "{{ target.query_result[0].t }}"
+            dest: /tmp/keelinfra-restore-time
+            mode: "0644"
+          delegate_to: localhost
+          become: false
+
+    - name: After the restore, the row is back
+      when: phase == 'after' and inventory_hostname == leader
+      become: true
+      become_user: postgres
+      community.postgresql.postgresql_query:
+        login_db: postgres
+        query: SELECT note FROM keelinfra_restore_check
+      register: restored_row
+      failed_when: restored_row.query_result | map(attribute='note') | list != ['before']
