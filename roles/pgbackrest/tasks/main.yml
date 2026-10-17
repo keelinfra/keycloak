@@ -1,21 +1,6 @@
 ---
-# From Ubuntu on Debian-family nodes, from PGDG (added by the postgres role)
-# on the RHEL family.
-- name: Install pgBackRest
-  ansible.builtin.package:
-    name: pgbackrest
-    state: present
-    disablerepo: "{{ '*' if dnf_offline | bool else omit }}"
-    enablerepo: "{{ 'keelinfra-offline' if dnf_offline | bool else omit }}"
-
-- name: Ensure repo directory exists (repo host)
-  ansible.builtin.file:
-    path: "{{ pgbackrest_repo_path }}"
-    state: directory
-    owner: postgres
-    group: postgres
-    mode: "0750"
-  when: inventory_hostname == pgbackrest_repo_host
+- name: Install and configure pgBackRest
+  ansible.builtin.include_tasks: config.yml
 
 # --- SSH mesh between postgres users (repo pulls, nodes push WAL) -------
 - name: Ensure postgres .ssh directory exists
@@ -69,36 +54,6 @@
     owner: postgres
     group: postgres
     mode: "0644"
-
-- name: Create pgbackrest config directory
-  ansible.builtin.file:
-    path: /etc/pgbackrest
-    state: directory
-    owner: postgres
-    group: postgres
-    mode: "0750"
-
-- name: Install the bucket's CA certificate
-  ansible.builtin.copy:
-    src: "{{ backup_s3.ca_file }}"
-    dest: "{{ pgbackrest_s3_ca_path }}"
-    owner: postgres
-    group: postgres
-    mode: "0644"
-  when: backup_s3 | length > 0 and backup_s3.ca_file | length > 0
-
-- name: Render pgbackrest configuration
-  ansible.builtin.template:
-    src: pgbackrest.conf.j2
-    dest: /etc/pgbackrest/pgbackrest.conf
-    owner: postgres
-    group: postgres
-    mode: "0640"
-
-- name: Remove default pgbackrest conf dir marker
-  ansible.builtin.file:
-    path: /etc/pgbackrest.conf
-    state: absent
 
 - name: Create stanza (repo host)
   become: true

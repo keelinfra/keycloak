@@ -73,7 +73,7 @@ When an alert fires, [RUNBOOKS.md](RUNBOOKS.md) says what is broken for your use
 
 When the data itself is wrong (a deleted realm, a bad change), `./restore --time "2026-10-17 09:30:00+00"` puts the database back as it was at that moment, on every node; without `--time` it restores as close to now as the archived WAL goes. CI drops a table and restores it on three nodes.
 
-When a machine dies, `./replace-node kc-node3` installs a fresh one at the same address and joins it to the running cluster; CI kills a node and replaces it on three nodes.
+When a machine dies, `./replace-node kc-node3` installs a fresh one at the same address and joins it to the running cluster; CI kills a node and replaces it on three nodes. When every machine is gone, `./rebuild` installs blank ones and restores the database from the off-site bucket; CI wipes all three nodes and gets its data back.
 
 `./verify` and an alert warn 30 days before any certificate on a node expires; `./renew-certs` renews the ones the cluster signs itself, without downtime.
 
@@ -92,6 +92,10 @@ Supported paths are listed in [UPGRADES.md](UPGRADES.md) and re-verified nightly
 The distribution is free and open source. A yearly subscription adds [CVE tracking](CVE-POLICY.md), upgrade runbooks, and direct access to the people who build it; prebuilt offline bundles for each release join it when they ship (anyone can build one today with `bundle/build.sh`). Standard is $4,500 per production cluster per year (up to 3 Keycloak nodes), Enterprise from $12,000 — not per user. → https://keelinfra.io/keycloak/pricing/
 
 CVE tracking means notification, impact analysis against your configuration, and help upgrading along a drilled path — **not** backported patches. [CVE-POLICY.md](CVE-POLICY.md) states the boundary, and works through what "20 CVEs" actually meant for two recent releases.
+
+## Security
+
+Report vulnerabilities privately: [SECURITY.md](SECURITY.md). Releases from October 2026 on carry a CycloneDX SBOM and signed attestations you can check with `gh attestation verify`; how that and our vulnerability handling line up with the EU Cyber Resilience Act is in [CRA.md](CRA.md).
 
 ## License
 

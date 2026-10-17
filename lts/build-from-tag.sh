@@ -12,7 +12,7 @@
 # Example: ./build-from-tag.sh 26.2.9
 #
 # Requirements: JDK 17 or 21, git, ~4 GB disk for sources + Maven repo.
-# Output: keycloak-<tag>.tar.gz and .zip under <workdir>/kc-<tag>/quarkus/dist/target/
+# Output: keycloak-<tag>.tar.gz, .zip and the SBOM keycloak-<tag>.cdx.json under <workdir>/kc-<tag>/quarkus/dist/target/
 
 set -euo pipefail
 
@@ -54,6 +54,16 @@ fi
 DIST_TAR="$SRC/quarkus/dist/target/keycloak-$TAG.tar.gz"
 test -f "$DIST_TAR"
 
+# SBOM (CycloneDX JSON) of what the distribution ships: the dist module's
+# runtime dependency tree, from the CycloneDX project's own Maven plugin,
+# pinned. Test-scoped dependencies are left out by the plugin's default.
+CYCLONEDX_PLUGIN="org.cyclonedx:cyclonedx-maven-plugin:2.9.3"
+./mvnw -q -pl quarkus/dist "$CYCLONEDX_PLUGIN:makeBom" \
+  -DprojectType=application -DoutputFormat=json -DoutputName="keycloak-$TAG.cdx"
+SBOM="$SRC/quarkus/dist/target/keycloak-$TAG.cdx.json"
+test -s "$SBOM"
+
 echo
 echo "Built: $DIST_TAR"
+echo "SBOM:  $SBOM"
 sha256sum "$SRC/quarkus/dist/target/keycloak-$TAG".{tar.gz,zip} 2>/dev/null || sha256sum "$DIST_TAR"

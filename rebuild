@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# keelinfra/keycloak — rebuild: every node lost; install blank machines and
+# restore the database from the off-site backup (backup_s3).
+# Usage: ./rebuild [--time "2026-10-17 09:30:00+00"] [--yes]
+# The machines take the nodes' names and addresses from the cluster
+# definition, with SSH access for the ssh_user. Refuses if any node still
+# has a database: use ./restore or ./replace-node for those.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+TIME="" YES=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --time) TIME="$2"; shift 2 ;;
+    --yes) YES=true; shift ;;
+    -h|--help) sed -n '3,7p' "$0"; exit 0 ;;
+    *) echo "unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+TIME_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?([+-][0-9]{2}(:?[0-9]{2})?)?$'
+[[ -z "$TIME" || "$TIME" =~ $TIME_RE ]] || {
+  echo "error: --time is \"YYYY-MM-DD HH:MM:SS+TZ\", e.g. \"2026-10-17 09:30:00+00\" (UTC); without a zone the first node's local time" >&2
+  exit 1
+}
+[[ -f inventory/hosts.yml ]] || { echo "error: no inventory found — run ./configure first" >&2; exit 1; }
+export ANSIBLE_VAULT_PASSWORD_FILE="$PWD/inventory/.vault_pass"
+
+CLUSTER=$(awk '/^cluster_name:/ {print $2}' inventory/group_vars/all/cluster.yml | tr -d '"')
+if ! $YES; then
+  echo "This installs every node of '$CLUSTER' from scratch and restores the database from"
+  echo "the off-site backup${TIME:+ as of $TIME}. Only for a cluster whose every node is gone."
+  read -r -p "Type the cluster name to continue: " answer
+  [[ "$answer" == "$CLUSTER" ]] || { echo "cancelled" >&2; exit 1; }
+fi
+
+exec ansible-playbook playbooks/rebuild.yml \
+  -e "rebuild_confirmed=$CLUSTER" -e "{\"restore_time\": \"$TIME\"}"
