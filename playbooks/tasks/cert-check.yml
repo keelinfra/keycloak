@@ -31,7 +31,7 @@
 - name: Show certificate expiry
   ansible.builtin.debug:
     msg: >-
-      {% for k, v in cert_expiry.items() %}{{ k }} {{ ('%Y-%m-%d' | strftime(v)) if v is number else v }}
+      {% for k, v in cert_expiry.items() %}{{ k }} {{ ('%Y-%m-%d %H:%M' | strftime(v, utc=true)) if v is number else v }}
       {{- '; ' if not loop.last }}{% endfor %}
 
 - name: No certificate expires soon (cert_warn_days)
@@ -46,7 +46,7 @@
       - item.value is number
       - item.value - (cert_now | int) > cert_warn_days * 86400
     fail_msg: >-
-      {{ item.key }}: {{ (('expires ' ~ ('%Y-%m-%d' | strftime(item.value))) if item.value is number
+      {{ item.key }}: {{ (('expires ' ~ ('%Y-%m-%d' | strftime(item.value, utc=true))) if item.value is number
       else item.value) }}. {{ renew_hint }}
     quiet: true
   loop: "{{ cert_expiry | dict2items | selectattr('key', 'search', '/') | list }}"
@@ -72,7 +72,8 @@
   ansible.builtin.debug:
     msg: >-
       {{ 'ok' if served == on_disk else
-         'Keycloak still serves the previous certificate (expires ' ~ served ~ '); it re-reads the file within the hour.' }}
+         'Keycloak still serves the previous certificate (expires '
+         ~ ('%Y-%m-%d %H:%M' | strftime(served | int, utc=true)) ~ ' UTC); it re-reads the file within the hour.' }}
   vars:
     served: "{{ cert_expiry[ansible_host ~ ':' ~ keycloak_https_port] }}"
     on_disk: "{{ cert_expiry[tls_dir ~ '/server.crt'] }}"
