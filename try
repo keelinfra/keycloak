@@ -40,7 +40,8 @@ if [[ -f inventory/hosts.yml && ! -f .dev/containers/cluster.yml ]]; then
 fi
 
 start=$SECONDS
-dev/ha-up.sh --force --domain localhost --publish "$PORT" "${UP_ARGS[@]}"
+# ${a[@]+"${a[@]}"}: macOS bash 3.2 calls an empty "${a[@]}" unbound under set -u.
+dev/ha-up.sh --force --domain localhost --publish "$PORT" ${UP_ARGS[@]+"${UP_ARGS[@]}"}
 
 # Keycloak answers on the host port; tell it so, or it sends the browser to
 # port 443. A file of its own in the inventory survives ./upgrade.
