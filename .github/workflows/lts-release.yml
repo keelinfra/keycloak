@@ -71,28 +71,31 @@ jobs:
           curl -sf http://127.0.0.1:8080/realms/master/.well-known/openid-configuration > /dev/null
           kill %1
 
-      # Anyone can check a download came from this workflow run, unmodified:
+      # Signed build-provenance and SBOM attestations, plus cra-evidence.json
+      # (support period, hashes, attestation links), which the daily
+      # cra-monitor workflow reads. Anyone can check a download came from this
+      # workflow run, unmodified:
       #   gh attestation verify keycloak-<tag>.tar.gz --repo keelinfra/keycloak
-      - name: Attest build provenance
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+      - name: Record release evidence
+        id: ledger
+        uses: keelinfra/release-ledger@e3b7a834667dc585e8665dd4719b6aa8fb65a3a2  # main, 2026-10-17
         with:
+          product: keycloak
+          version: kc-${{ inputs.tag }}-keel${{ inputs.revision }}
+          support-until: "2031-12-31"
+          sbom: dist/keycloak-${{ inputs.tag }}.cdx.json
           subject-path: |
             dist/keycloak-${{ inputs.tag }}.tar.gz
             dist/keycloak-${{ inputs.tag }}.zip
-
-      - name: Attest SBOM
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
-        with:
-          subject-path: |
-            dist/keycloak-${{ inputs.tag }}.tar.gz
-            dist/keycloak-${{ inputs.tag }}.zip
-          sbom-path: dist/keycloak-${{ inputs.tag }}.cdx.json
+          upload: "false"
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          EVIDENCE: ${{ steps.ledger.outputs.evidence }}
         run: |
           rel="kc-$TAG-keel$REV"
+          cp "$EVIDENCE" dist/
           {
             echo "Keycloak server distribution built from the upstream git tag \`$TAG\` with [\`lts/build-from-tag.sh\`](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/lts/build-from-tag.sh) — an upstream maintenance tag with no published community artifacts (see [why](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/lts/VERIFICATION-26.2.9.md))."
             echo

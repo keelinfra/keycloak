@@ -1,0 +1,66 @@
+---
+# Keep a copy of the CAs (keys, and the certificates they signed) on the
+# control machine, encrypted with the cluster's vault password, next to the
+# cluster definition. Without it, losing the first node means a new CA and
+# new certificates on every node.
+- name: Pack the CAs
+  ansible.builtin.shell: |
+    set -eu
+    cd /
+    files=""
+    for f in {{ (tls_dir ~ '/ca.key') | regex_replace('^/', '') }} \
+             {{ (tls_dir ~ '/ca.crt') | regex_replace('^/', '') }} \
+             {{ (tls_dir ~ '/server.key') | regex_replace('^/', '') }} \
+             {{ (tls_dir ~ '/server.crt') | regex_replace('^/', '') }} \
+             {{ (internal_tls_dir ~ '/ca') | regex_replace('^/', '') }}; do
+      [ -e "$f" ] && files="$files $f"
+    done
+    [ -n "$files" ] || exit 0
+    # shellcheck disable=SC2086
+    tar -czf /root/.keelinfra-ca-backup.tgz $files
+    echo PACKED
+  args:
+    executable: /bin/bash
+  register: ca_packed
+  changed_when: false
+
+# ansible-vault takes the vault password file the wrappers (./install,
+# ./renew-certs, ...) set in ANSIBLE_VAULT_PASSWORD_FILE.
+- name: Bring the CA copy to the control machine
+  when:
+    - "'PACKED' in ca_packed.stdout"
+    - lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') | length > 0
+  block:
+    - name: Fetch the archive
+      ansible.builtin.fetch:
+        src: /root/.keelinfra-ca-backup.tgz
+        dest: "{{ tls_ca_backup }}.tmp"
+        flat: true
+      changed_when: false
+
+    # Into a new file first: the old copy stays until the new one is complete.
+    - name: Encrypt it with the vault password
+      ansible.builtin.shell: >-
+        ansible-vault encrypt
+        --output "{{ tls_ca_backup }}.new" "{{ tls_ca_backup }}.tmp"
+        && chmod 600 "{{ tls_ca_backup }}.new"
+        && mv "{{ tls_ca_backup }}.new" "{{ tls_ca_backup }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    # Two tasks, not one loop over both machines: Ansible reuses the first
+    # item's delegated connection for the next one.
+    - name: Remove the unencrypted copy on the control machine
+      ansible.builtin.file:
+        path: "{{ tls_ca_backup }}.tmp"
+        state: absent
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Remove the archive on the CA host
+      ansible.builtin.file:
+        path: /root/.keelinfra-ca-backup.tgz
+        state: absent
+      changed_when: false

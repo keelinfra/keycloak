@@ -10,7 +10,8 @@
 # for one lost node, ./replace-node.
 #
 #  1. Refuse if any node still has a PostgreSQL data directory.
-#  2. Install the base system, certificates (a new internal CA) and etcd.
+#  2. Install the base system, certificates (the CAs come back from the copy
+#     in inventory/ when there is one) and etcd.
 #  3. On the first node: restore the newest backup from the bucket and
 #     replay its WAL, then start Patroni there as the leader.
 #  4. Start the other nodes; they clone from it. Then HAProxy, pgBackRest,
@@ -183,5 +184,4 @@
     - name: Done
       ansible.builtin.debug:
         msg: >-
-          Rebuilt from the off-site backup. The internal CA is new; your own certificate,
-          if you configured one, is installed as before. Run ./verify next.
+          Rebuilt from the off-site backup. Run ./verify next.

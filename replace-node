@@ -3,7 +3,7 @@
 # Usage: ./replace-node <node name> [--yes]
 # The new machine takes the old node's name and address from the cluster
 # definition, with SSH access for the ssh_user. The other nodes keep serving
-# while it joins. Not for the first node (internal CA, backups, monitoring).
+# while it joins. The first node gets its CAs back from inventory/.
 set -euo pipefail
 cd "$(dirname "$0")"
 
