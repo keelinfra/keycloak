@@ -15,18 +15,24 @@ python3 -m venv /tmp/venv
 mkdir -p /out/dist /out/collections
 get() { curl -fsSL --retry 4 -o "$2" "$1"; }
 
-# Keycloak: the upstream tarball, checked against its .sha1, or the LTS build
-# passed with --dist-url, checked against SHA256SUMS in its release (the same
-# checks roles/keycloak makes online).
+# Keycloak: the upstream tarball or the LTS build passed with --dist-url,
+# checked as roles/keycloak checks it online (keycloak_dist_checksum: an
+# algorithm, then a digest or the URL of a checksum file).
 kc_file="$(basename "$DIST_URL")"
 get "$DIST_URL" "/out/dist/$kc_file"
-if [[ "$DIST_URL" == https://github.com/keycloak/keycloak/releases/* ]]; then
-  get "$DIST_URL.sha1" /tmp/kc.sha1
-  echo "$(cut -d' ' -f1 /tmp/kc.sha1)  /out/dist/$kc_file" | sha1sum -c --quiet
-else
-  get "$(dirname "$DIST_URL")/SHA256SUMS" /tmp/kc.sums
-  (cd /out/dist && grep " $kc_file\$" /tmp/kc.sums | sha256sum -c --quiet)
+kc_sum="$(cd /src && ANSIBLE_LOCALHOST_WARNING=False /tmp/venv/bin/ansible localhost -c local \
+  -e @roles/keycloak/defaults/main.yml -e "keycloak_version=$VERSION" -e "keycloak_dist_url=$DIST_URL" \
+  -m ansible.builtin.debug -a 'msg={{ keycloak_dist_checksum }}' 2>/dev/null \
+  | sed -n 's/.*"msg": "\(.*\)".*/\1/p')"
+kc_algo="${kc_sum%%:*}" kc_digest="${kc_sum#*:}"
+[[ "$kc_algo" =~ ^sha(1|256|512)$ ]] || { echo "error: could not resolve keycloak_dist_checksum" >&2; exit 1; }
+if [[ "$kc_digest" == http*://* ]]; then
+  get "$kc_digest" /tmp/kc.sums
+  # A bare digest, or "<digest>  <file>" lines.
+  if [[ "$(wc -w < /tmp/kc.sums)" -eq 1 ]]; then kc_digest="$(cat /tmp/kc.sums)"
+  else kc_digest="$(grep " $kc_file\$" /tmp/kc.sums | cut -d' ' -f1)"; fi
 fi
+echo "$kc_digest  /out/dist/$kc_file" | "${kc_algo}sum" -c --quiet
 
 # etcd, checked against the release's SHA256SUMS.
 etcd_version="$(sed -n 's/^etcd_version: *"\{0,1\}\([0-9.]*\).*/\1/p' /src/roles/etcd/defaults/main.yml)"
