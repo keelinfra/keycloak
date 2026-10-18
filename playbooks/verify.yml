@@ -344,6 +344,10 @@
   vars:
     crash_dir: /tmp/keelinfra-crash
     patronictl: patronictl -c /etc/patroni/config.yml
+    # Replaced by set_fact below. delegate_to is templated even on tasks the
+    # drill condition skips, so both need a value when the drill does not run.
+    crash_leader: "{{ inventory_hostname }}"
+    crash_writer: "{{ inventory_hostname }}"
   tasks:
     - name: Run crash drill
       when: drill | default('health') == 'crash'
