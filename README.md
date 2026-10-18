@@ -73,7 +73,7 @@ When an alert fires, [RUNBOOKS.md](RUNBOOKS.md) says what is broken for your use
 
 When the data itself is wrong (a deleted realm, a bad change), `./restore --time "2026-10-17 09:30:00+00"` puts the database back as it was at that moment, on every node; without `--time` it restores as close to now as the archived WAL goes. CI drops a table and restores it on three nodes.
 
-When a machine dies, `./replace-node kc-node3` installs a fresh one at the same address and joins it to the running cluster; CI kills a node and replaces it on three nodes. When every machine is gone, `./rebuild` installs blank ones and restores the database from the off-site bucket; CI wipes all three nodes and gets its data back.
+When a machine dies, `./replace-node kc-node3` installs a fresh one at the same address and joins it to the running cluster, the first node included (its CAs come back from an encrypted copy on your control machine); CI kills the third node, then the first, and replaces each. When every machine is gone, `./rebuild` installs blank ones and restores the database from the off-site bucket; CI wipes all three nodes and gets its data back.
 
 `./verify` and an alert warn 30 days before any certificate on a node expires; `./renew-certs` renews the ones the cluster signs itself, without downtime.
 

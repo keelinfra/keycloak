@@ -43,8 +43,9 @@ What survives what, on a 3-node cluster:
 - **Two nodes down:** etcd loses quorum and PostgreSQL stops accepting writes. Keycloak cannot
   serve logins. Three nodes tolerate one failure, not two.
 - **The first node down:** the cluster keeps serving, but backups, Prometheus, Alertmanager and
-  Grafana are down with it until it returns. If its disk is lost, so is repository 1. This is why
-  production clusters should set `backup_s3`.
+  Grafana are down with it until it returns or is replaced (`./replace-node`, see Day two).
+  Meanwhile WAL cannot reach repository 1, so the PostgreSQL leader keeps it on disk. If its disk
+  is lost, so is repository 1. This is why production clusters should set `backup_s3`.
 
 ## Before you start
 
@@ -85,9 +86,12 @@ that CA. PostgreSQL refuses unencrypted connections from the nodes. Keycloak enc
 cluster traffic (port 7800) with mutual TLS. `./verify` checks every one of these ports on every
 node and fails if one answers in plaintext. One port stays plain: 57800, where Keycloak's
 cluster checks that the other nodes are alive. It carries those messages only (node names and addresses), no user,
-session or database data. The internal CA's key never leaves the first node
-(`/etc/keelinfra/tls/internal/ca/`); node certificates are valid for two years, and
-`./renew-certs` replaces them (see Day two).
+session or database data. The internal CA's key stays on the first node
+(`/etc/keelinfra/tls/internal/ca/`), with one copy on your control machine:
+`inventory/ca-backup-<cluster>.tgz.vault`, encrypted with the vault password and refreshed by
+`./install` and `./renew-certs`. Back up `inventory/` with it; that copy is what lets
+`./replace-node` give a new first node the same CAs. Node certificates are valid for two years,
+and `./renew-certs` replaces them (see Day two).
 
 Clusters installed before this have `internal_tls` unset and keep running as they were. etcd
 cannot move to TLS in place, so `./install` stops (in preflight, before changing anything) if
@@ -235,8 +239,9 @@ It asks you to type the cluster name and refuses if any node still has a databas
 every node as `./install` does, restores the bucket's backup on the first node and replays its WAL,
 lets the other nodes clone from it, starts Keycloak (realm files are not applied again: the
 restored database is the truth) and takes a full backup. Changes from the last minute before the
-loss can be missing: WAL goes to the bucket at least every 60 seconds (`archive_timeout`). The
-internal CA is new, so the internal certificates are new too. CI writes a row, wipes all three
+loss can be missing: WAL goes to the bucket at least every 60 seconds (`archive_timeout`). With
+the CA copy in `inventory/` the CAs come back as they were; without it they are new, and so is
+every certificate. CI writes a row, wipes all three
 nodes, rebuilds from the bucket and checks the row is back, on three nodes, whenever the roles
 change.
 
@@ -291,9 +296,11 @@ ANSIBLE_VAULT_PASSWORD_FILE=inventory/.vault_pass ansible-vault view inventory/g
   that the other nodes are healthy, swaps the etcd member, installs the node, lets PostgreSQL
   clone itself from the leader and starts Keycloak; users keep logging in through the other
   nodes. If the old machine still runs, its services are stopped and their data is moved
-  aside (`*.before-replace-<time>`). CI kills a node of a running three-node cluster, starts
-  a blank machine in its place and replaces it. Not for the first node, which holds the
-  internal CA, backup repository 1 and monitoring; a new address is not scripted either.
+  aside (`*.before-replace-<time>`). The first node works the same way: it gets its CAs back
+  from the copy in `inventory/`, a new repository 1 with a fresh full backup (the bucket keeps
+  the older history) and new, empty monitoring history. CI kills the third node, then the first,
+  of a running three-node cluster and replaces each with a blank machine. A new address is not
+  scripted.
 - **Security fixes upstream:** see the [CVE policy](CVE-POLICY.md).
 
 ## Known gaps
@@ -303,10 +310,11 @@ Stated plainly, so you can plan around them:
 - Certificates are not renewed on a schedule: you run `./renew-certs` when warned. Replacing a
   CA (ten years) is not scripted.
 - Ubuntu 24.04, Rocky Linux 9 and AlmaLinux 9 are tested; RHEL 9 is not in CI.
-- `./replace-node` replaces the second or third node at the same address; replacing the first
-  node, or moving a node to a new address, is not scripted.
-- Monitoring and repository 1 live on the first node. Losing it stops backups and alerting until
-  it returns; `backup_s3` keeps the backups safe, nothing yet keeps alerting up.
+- `./replace-node` replaces a node at the same address; moving a node to a new address is not
+  scripted.
+- Monitoring and repository 1 live on the first node. Until it returns or is replaced, there is no
+  alerting and no backup to repository 1; `backup_s3` keeps the backups safe. Replacing it starts
+  repository 1 and the metrics history afresh.
 - Prometheus and Grafana listen on all interfaces; restrict them with your firewall.
 - `./rebuild` after losing every node needs the off-site bucket; a cluster without `backup_s3`
   has no backup left once the first node is gone.

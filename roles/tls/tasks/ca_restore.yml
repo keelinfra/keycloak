@@ -1,0 +1,42 @@
+---
+# A new machine in place of the CA host (./replace-node on the first node):
+# put the CAs back from the copy on the control machine, so every node's
+# certificate stays valid and the CA host signs with the same keys.
+- name: Look for the CA keys on the CA host
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ tls_dir }}/ca.key"
+    - "{{ internal_tls_dir }}/ca/ca.key"
+  register: ca_keys
+
+- name: Look for the CA copy on the control machine
+  ansible.builtin.stat:
+    path: "{{ tls_ca_backup }}"
+  register: ca_backup_file
+  delegate_to: localhost
+  become: false
+
+- name: Put the CAs back from the copy
+  when:
+    - ca_keys.results | selectattr('stat.exists') | list | length == 0
+    - ca_backup_file.stat.exists
+  block:
+    - name: Copy the CA archive to the CA host (decrypted on the way)
+      ansible.builtin.copy:
+        src: "{{ tls_ca_backup }}"
+        dest: /root/.keelinfra-ca-restore.tgz
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Unpack the CAs
+      ansible.builtin.unarchive:
+        src: /root/.keelinfra-ca-restore.tgz
+        dest: /
+        remote_src: true
+
+    - name: Remove the archive
+      ansible.builtin.file:
+        path: /root/.keelinfra-ca-restore.tgz
+        state: absent
