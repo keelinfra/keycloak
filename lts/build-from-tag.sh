@@ -38,13 +38,13 @@ test "$(git describe --tags)" = "$TAG"
 # build wants to keep.
 POM="model/infinispan/pom.xml"
 if [ -f "$POM" ]; then
-  for ref in $(grep -o 'refs/heads/release/[0-9.]*' "$POM" | sort -u); do
+  while read -r ref; do
     url="https://raw.githubusercontent.com/keycloak/keycloak/$ref/model/infinispan/proto.lock"
     if [ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" = "404" ]; then
       sed -i "s|$ref/model|${ref/release\//archive\/release\/}/model|" "$POM"
       echo "patched dead proto.lock URL: $ref -> ${ref/release\//archive\/release\/}"
     fi
-  done
+  done < <(grep -o 'refs/heads/release/[0-9.]*' "$POM" | sort -u)
 fi
 
 # Server distribution only, tests skipped; the same scoped build the upstream
