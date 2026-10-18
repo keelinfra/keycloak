@@ -71,7 +71,10 @@ group "Cloud image ($OS)"
 CACHED="$IMAGES/$(basename "$IMAGE_URL")"
 BASE="$DISKS/$(basename "$IMAGE_URL")"
 if [[ ! -f "$CACHED" || -n "$(find "$CACHED" -mtime +0 2>/dev/null)" ]]; then
-  curl -fL --retry 3 -o "$IMAGES/image.part" "$IMAGE_URL"
+  # --retry alone skips errors such as a mirror resetting the HTTP/2 stream
+  # mid-file (curl exit 92); a stalled transfer is cut after a minute.
+  curl -fL --retry 5 --retry-all-errors --retry-delay 10 \
+    --speed-limit 10240 --speed-time 60 -o "$IMAGES/image.part" "$IMAGE_URL"
   mv "$IMAGES/image.part" "$CACHED"
 fi
 # The overlays below are backed by this copy, next to them where QEMU can read it.
