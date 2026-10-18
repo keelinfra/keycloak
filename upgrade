@@ -39,4 +39,4 @@ if [[ -f "$OFFLINE_DIR/bundle.yml" ]]; then
 fi
 
 exec ansible-playbook playbooks/upgrade.yml \
-  -e "keycloak_target_version=$TARGET" -e "upgrade_force=$FORCE" "${EXTRA[@]}"
+  -e "keycloak_target_version=$TARGET" -e "upgrade_force=$FORCE" ${EXTRA[@]+"${EXTRA[@]}"}
