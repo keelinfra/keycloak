@@ -82,6 +82,11 @@
 
 # Dynamic Patroni settings live in etcd, not in config.yml: set them through
 # the API so existing clusters change too. Any member can write them.
+- name: Decide on synchronous replication
+  ansible.builtin.set_fact:
+    postgres_want_sync: "{{ postgres_synchronous | bool and groups['postgres'] | length > 1 }}"
+  run_once: true
+
 - name: Read Patroni's dynamic configuration
   ansible.builtin.uri:
     url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/config"
@@ -101,11 +106,9 @@
     force_basic_auth: true
     body_format: json
     body:
-      synchronous_mode: "{{ want_sync | bool }}"
+      synchronous_mode: "{{ postgres_want_sync | bool }}"
       synchronous_mode_strict: false
     status_code: 200
   run_once: true
   changed_when: true
-  vars:
-    want_sync: "{{ postgres_synchronous | bool and groups['postgres'] | length > 1 }}"
-  when: patroni_dynamic.json.synchronous_mode | default(false) | bool != want_sync | bool
+  when: patroni_dynamic.json.synchronous_mode | default(false) | bool != postgres_want_sync | bool

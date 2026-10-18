@@ -426,6 +426,7 @@
               loop: [acked, stop]
 
             - name: Create the drill table
+              become: true
               become_user: postgres
               community.postgresql.postgresql_query:
                 login_host: 127.0.0.1
@@ -439,6 +440,7 @@
               changed_when: true
 
             - name: Start writing
+              become: true
               become_user: postgres
               ansible.builtin.command:
                 cmd: "{{ crash_dir }}/writer.sh {{ crash_dir }}"
@@ -546,7 +548,7 @@
           register: crash_present
           changed_when: false
 
-        - name: Wait for {{ crash_leader }} to come back as a replica
+        - name: Wait for the old leader to come back as a replica, {{ crash_leader }}
           delegate_to: "{{ crash_writer }}"
           ansible.builtin.command:
             cmd: "{{ patronictl }} list -f json"
@@ -577,6 +579,7 @@
           become: true
           block:
             - name: Drop the drill table
+              become: true
               become_user: postgres
               community.postgresql.postgresql_query:
                 login_host: 127.0.0.1
