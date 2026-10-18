@@ -164,8 +164,8 @@ restored.
 ./install
 ```
 
-The playbooks run in order: OS preparation, etcd, PostgreSQL and Patroni, HAProxy, pgBackRest
-(including a first full backup to every repository), TLS material, Keycloak, realm
+The playbooks run in order: the preflight checks, OS preparation, TLS material, etcd, PostgreSQL
+and Patroni, HAProxy, pgBackRest (including a first full backup to every repository), Keycloak, realm
 configuration, the VIP if set, and monitoring.
 
 Every install also creates a `demo` realm (user `demo`, password `demo12345`) that the session

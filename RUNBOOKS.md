@@ -16,7 +16,7 @@ Whatever fired, start here. Together they show which layer is broken.
 ```bash
 ./verify                                                    # every component, from the control machine
 sudo patronictl -c /etc/patroni/config.yml list             # PostgreSQL: who leads, who lags
-/usr/local/bin/etcdctl endpoint health --cluster            # etcd: is there a quorum
+sudo -i etcdctl endpoint health --cluster                   # etcd: is there a quorum
 ```
 
 The layers depend on each other from the bottom up: etcd holds the leader lock, Patroni runs
@@ -38,7 +38,7 @@ changes, token refreshes. Keycloak may still serve some cached reads.
 
 **Check**
 
-1. `/usr/local/bin/etcdctl endpoint health --cluster`. Patroni cannot elect a leader without an
+1. `sudo -i etcdctl endpoint health --cluster`. Patroni cannot elect a leader without an
    etcd quorum (2 of 3 members). If etcd is unhealthy, go to [EtcdNoLeader](#etcdnoleader) first.
 2. `sudo patronictl -c /etc/patroni/config.yml list`. Look at the State column. `stopped` or
    missing members mean Patroni is down there: `sudo systemctl status patroni` and

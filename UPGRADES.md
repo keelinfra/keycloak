@@ -155,9 +155,10 @@ its CVEs are not sorted in [CVE-POLICY.md](CVE-POLICY.md) yet.
 
 We build the tags ourselves and publish them as
 [`kc-<version>-keel<rev>` releases](https://github.com/keelinfra/keycloak/releases)
-(see [lts/](lts/)); `./upgrade --dist-url <release url>` installs them, checked against
+(see [lts/](lts/)); `./upgrade --to <version> --dist-url <release url>` installs them, checked against
 the `SHA256SUMS` in the same release. A tarball from anywhere else needs
-`-e keycloak_dist_checksum=sha256:<hex>`.
+`keycloak_dist_checksum: "sha256:<hex>"` in a file under `inventory/group_vars/all/`
+(`./upgrade` takes no `-e`; remove the file after the upgrade).
 
 | From | To | Strategy | Sessions survive | Verified on | Notes |
 |---|---|---|---|---|---|
