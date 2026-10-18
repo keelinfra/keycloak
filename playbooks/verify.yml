@@ -5,7 +5,10 @@
 # ./verify --drill restore     → pgBackRest restore to a scratch directory
 # ./verify --drill session     → login, rolling restart, session must survive
 # ./verify --drill alert       → send a test alert to the configured receivers
-# ./verify --drill all         → everything
+# ./verify --drill all         → everything above
+# ./verify --drill crash       → freeze the PostgreSQL leader mid-write; no
+#                                acknowledged write may be lost (not in "all":
+#                                writes pause for about half a minute)
 
 - name: Health checks
   hosts: cluster
@@ -125,6 +128,33 @@
         msg: "{{ patroni_list.stdout_lines }}"
       run_once: true
 
+    # A replica confirms every commit (roles/postgres, postgres_synchronous),
+    # so a failover cannot lose a saved write. Right after a failover Patroni
+    # takes a loop or two to name the new synchronous replica.
+    - name: Look for the synchronous replica
+      ansible.builtin.command:
+        cmd: patronictl -c /etc/patroni/config.yml list -f json
+      register: patroni_sync
+      until: >-
+        (patroni_sync.stdout | from_json) | selectattr('Role', 'equalto', 'Sync Standby') | list | length > 0
+      retries: 12
+      delay: 5
+      failed_when: false
+      changed_when: false
+      run_once: true
+      when: postgres_synchronous | default(true) | bool and groups['postgres'] | length > 1
+
+    - name: One replica confirms every commit
+      ansible.builtin.assert:
+        that: (patroni_sync.stdout | from_json) | selectattr('Role', 'equalto', 'Sync Standby') | list | length > 0
+        fail_msg: >-
+          No replica is synchronous, so a failover could lose the last writes. Clusters
+          installed before synchronous replication need ./install once to turn it on.
+          Cluster state: {{ patroni_sync.stdout }}
+        quiet: true
+      run_once: true
+      when: postgres_synchronous | default(true) | bool and groups['postgres'] | length > 1
+
 - name: Backup and monitoring health
   hosts: monitoring
   gather_facts: false
@@ -239,11 +269,17 @@
               {{ (cluster_state.stdout | from_json)
                  | selectattr('Role', 'equalto', 'Leader')
                  | map(attribute='Member') | first }}
+            # The synchronous replica first: with synchronous replication
+            # Patroni switches over only to it.
             streaming_replicas: >-
-              {{ (cluster_state.stdout | from_json)
-                 | selectattr('Role', 'equalto', 'Replica')
-                 | selectattr('State', 'equalto', 'streaming')
-                 | map(attribute='Member') | list }}
+              {{ ((cluster_state.stdout | from_json)
+                  | selectattr('Role', 'equalto', 'Sync Standby')
+                  | selectattr('State', 'equalto', 'streaming')
+                  | map(attribute='Member') | list)
+                 + ((cluster_state.stdout | from_json)
+                  | selectattr('Role', 'equalto', 'Replica')
+                  | selectattr('State', 'equalto', 'streaming')
+                  | map(attribute='Member') | list) }}
 
         - name: A switchover needs a streaming replica to switch to
           ansible.builtin.assert:
@@ -293,6 +329,270 @@
         - name: Failover drill passed
           ansible.builtin.debug:
             msg: "✓ switchover {{ current_leader }} → {{ switch_target }} complete, writes OK through haproxy"
+
+# The leader stops answering mid-write, as a hung machine or a cut network
+# would: every process of its Patroni unit is frozen (SIGSTOP), so it neither
+# releases its leadership nor restarts. A node that is not the leader writes
+# one row per connection through its local HAProxy and logs every insert
+# PostgreSQL acknowledged. Patroni promotes the synchronous replica once the
+# leader's lock expires; every acknowledged row must be there, and the
+# longest gap between acknowledgements is how long writes paused. Then the
+# old leader is thawed and must come back as a replica.
+- name: Crash drill
+  hosts: primary
+  gather_facts: false
+  vars:
+    crash_dir: /tmp/keelinfra-crash
+    patronictl: patronictl -c /etc/patroni/config.yml
+  tasks:
+    - name: Run crash drill
+      when: drill | default('health') == 'crash'
+      block:
+        - name: Find the leader
+          ansible.builtin.command:
+            cmd: "{{ patronictl }} list -f json"
+          register: crash_before
+          changed_when: false
+
+        - name: Pick the leader and a node to write from
+          ansible.builtin.set_fact:
+            crash_leader: >-
+              {{ (crash_before.stdout | from_json) | selectattr('Role', 'equalto', 'Leader')
+                 | map(attribute='Member') | first }}
+            crash_writer: >-
+              {{ (crash_before.stdout | from_json) | rejectattr('Role', 'equalto', 'Leader')
+                 | map(attribute='Member') | first | default('') }}
+
+        - name: The crash drill needs a replica that confirms every commit
+          ansible.builtin.assert:
+            that:
+              - crash_writer | length > 0
+              - (crash_before.stdout | from_json) | selectattr('Role', 'equalto', 'Sync Standby') | list | length > 0
+            fail_msg: >-
+              The crash drill needs at least two nodes and synchronous replication
+              (postgres_synchronous). Cluster state: {{ crash_before.stdout }}
+
+        - name: Prepare the writer on {{ crash_writer }}
+          delegate_to: "{{ crash_writer }}"
+          become: true
+          block:
+            - name: Create the drill directory
+              ansible.builtin.file:
+                path: "{{ crash_dir }}"
+                state: directory
+                owner: postgres
+                mode: "0700"
+
+            - name: Write the database password file
+              ansible.builtin.copy:
+                dest: "{{ crash_dir }}/pgpass"
+                content: "127.0.0.1:{{ haproxy_pg_port }}:{{ keycloak_db_name }}:{{ keycloak_db_user }}:{{ vault_keycloak_db_password }}\n"
+                owner: postgres
+                mode: "0600"
+              no_log: true
+
+            - name: Write the writer script
+              ansible.builtin.copy:
+                dest: "{{ crash_dir }}/writer.sh"
+                owner: postgres
+                mode: "0700"
+                content: |
+                  #!/bin/bash
+                  # keelinfra crash drill: one insert per connection through the local
+                  # HAProxy; "<id> <epoch>" for every insert PostgreSQL acknowledged.
+                  dir=$1
+                  export PGPASSFILE=$dir/pgpass PGCONNECT_TIMEOUT=3
+                  psql=$(command -v psql || echo /usr/pgsql-{{ postgres_version }}/bin/psql)
+                  conn="host=127.0.0.1 port={{ haproxy_pg_port }}"
+                  conn="$conn dbname={{ keycloak_db_name }} user={{ keycloak_db_user }}"
+                  {% if internal_tls | default(false) | bool %}
+                  conn="$conn sslmode=verify-ca sslrootcert={{ internal_ca_file }}"
+                  {% endif %}
+                  i=0
+                  while [ ! -e "$dir/stop" ]; do
+                    i=$((i + 1))
+                    if timeout 5 "$psql" "$conn" -qAtX -v ON_ERROR_STOP=1 \
+                        -c "INSERT INTO keelinfra_crash VALUES ($i)" > /dev/null 2>&1; then
+                      echo "$i $(date +%s.%N)" >> "$dir/acked"
+                    else
+                      sleep 0.2
+                    fi
+                  done
+
+            - name: Start with an empty log
+              ansible.builtin.file:
+                path: "{{ crash_dir }}/{{ item }}"
+                state: absent
+              loop: [acked, stop]
+
+            - name: Create the drill table
+              become_user: postgres
+              community.postgresql.postgresql_query:
+                login_host: 127.0.0.1
+                login_port: "{{ haproxy_pg_port }}"
+                login_user: "{{ keycloak_db_user }}"
+                login_password: "{{ vault_keycloak_db_password }}"
+                login_db: "{{ keycloak_db_name }}"
+                ssl_mode: "{{ 'verify-ca' if internal_tls | default(false) | bool else 'prefer' }}"
+                ca_cert: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
+                query: DROP TABLE IF EXISTS keelinfra_crash; CREATE TABLE keelinfra_crash (id int PRIMARY KEY)
+              changed_when: true
+
+            - name: Start writing
+              become_user: postgres
+              ansible.builtin.command:
+                cmd: "{{ crash_dir }}/writer.sh {{ crash_dir }}"
+              async: 900
+              poll: 0
+              changed_when: true
+
+            - name: Wait until writes are acknowledged
+              ansible.builtin.command:
+                cmd: wc -l {{ crash_dir }}/acked
+              register: crash_warmup
+              until: crash_warmup.rc == 0 and (crash_warmup.stdout.split() | first | int) >= 20
+              retries: 30
+              delay: 1
+              changed_when: false
+
+        - name: Freeze the leader and check the takeover
+          block:
+            - name: Freeze every process of Patroni and PostgreSQL on {{ crash_leader }}
+              delegate_to: "{{ crash_leader }}"
+              become: true
+              ansible.builtin.command:
+                cmd: systemctl kill --signal=SIGSTOP patroni
+              changed_when: true
+
+            - name: Wait for another node to take over
+              delegate_to: "{{ crash_writer }}"
+              ansible.builtin.command:
+                cmd: "{{ patronictl }} list -f json"
+              register: crash_takeover
+              until: >-
+                crash_takeover.rc == 0 and
+                ((crash_takeover.stdout | from_json) | selectattr('Role', 'equalto', 'Leader')
+                 | selectattr('State', 'equalto', 'running') | map(attribute='Member') | list
+                 | reject('equalto', crash_leader) | list | length) == 1
+              retries: 40
+              delay: 3
+              changed_when: false
+
+            - name: Let writes run on the new leader
+              ansible.builtin.pause:
+                seconds: 10
+
+          always:
+            - name: Stop writing
+              delegate_to: "{{ crash_writer }}"
+              become: true
+              ansible.builtin.file:
+                path: "{{ crash_dir }}/stop"
+                state: touch
+                owner: postgres
+                mode: "0600"
+
+            - name: Let the last insert finish
+              ansible.builtin.pause:
+                seconds: 6
+
+            - name: Remove the database password file
+              delegate_to: "{{ crash_writer }}"
+              become: true
+              ansible.builtin.file:
+                path: "{{ crash_dir }}/pgpass"
+                state: absent
+
+            - name: Thaw {{ crash_leader }}
+              delegate_to: "{{ crash_leader }}"
+              become: true
+              ansible.builtin.command:
+                cmd: systemctl kill --signal=SIGCONT patroni
+              changed_when: true
+
+        - name: Read what PostgreSQL acknowledged
+          delegate_to: "{{ crash_writer }}"
+          become: true
+          ansible.builtin.command:
+            cmd: cat {{ crash_dir }}/acked
+          register: crash_acked
+          changed_when: false
+
+        - name: Measure the longest pause between acknowledged writes
+          delegate_to: "{{ crash_writer }}"
+          become: true
+          ansible.builtin.shell:
+            cmd: >-
+              awk 'NR > 1 { g = $2 - p; if (g > m) m = g } { p = $2 } END { printf "%.0f", m }'
+              {{ crash_dir }}/acked
+          register: crash_pause
+          changed_when: false
+
+        - name: Count the acknowledged rows on the new leader
+          delegate_to: "{{ crash_writer }}"
+          become: true
+          become_user: postgres
+          community.postgresql.postgresql_query:
+            login_host: 127.0.0.1
+            login_port: "{{ haproxy_pg_port }}"
+            login_user: "{{ keycloak_db_user }}"
+            login_password: "{{ vault_keycloak_db_password }}"
+            login_db: "{{ keycloak_db_name }}"
+            ssl_mode: "{{ 'verify-ca' if internal_tls | default(false) | bool else 'prefer' }}"
+            ca_cert: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
+            query: SELECT count(*) AS present FROM keelinfra_crash WHERE id = ANY(%(ids)s::int[])
+            named_args:
+              ids: "{{ crash_acked.stdout_lines | map('split') | map('first') | map('int') | list }}"
+          register: crash_present
+          changed_when: false
+
+        - name: Wait for {{ crash_leader }} to come back as a replica
+          delegate_to: "{{ crash_writer }}"
+          ansible.builtin.command:
+            cmd: "{{ patronictl }} list -f json"
+          register: crash_after
+          until: >-
+            crash_after.rc == 0 and
+            ((crash_after.stdout | from_json) | selectattr('Member', 'equalto', crash_leader)
+             | selectattr('Role', 'in', ['Replica', 'Sync Standby'])
+             | selectattr('State', 'equalto', 'streaming') | list | length) == 1
+          retries: 40
+          delay: 3
+          changed_when: false
+
+        - name: No acknowledged write may be lost
+          ansible.builtin.assert:
+            that: crash_present.query_result[0].present | int == crash_acked.stdout_lines | length
+            fail_msg: >-
+              {{ crash_acked.stdout_lines | length - crash_present.query_result[0].present | int }}
+              of {{ crash_acked.stdout_lines | length }} acknowledged writes are missing after the takeover.
+            success_msg: >-
+              ✓ {{ crash_leader }} frozen mid-write: {{ crash_takeover.stdout | from_json
+              | selectattr('Role', 'equalto', 'Leader') | map(attribute='Member') | first }} took over,
+              writes paused {{ crash_pause.stdout }} s, {{ crash_acked.stdout_lines | length }}
+              acknowledged writes, none lost; {{ crash_leader }} is back as a replica
+
+        - name: Remove the drill table and files
+          delegate_to: "{{ crash_writer }}"
+          become: true
+          block:
+            - name: Drop the drill table
+              become_user: postgres
+              community.postgresql.postgresql_query:
+                login_host: 127.0.0.1
+                login_port: "{{ haproxy_pg_port }}"
+                login_user: "{{ keycloak_db_user }}"
+                login_password: "{{ vault_keycloak_db_password }}"
+                login_db: "{{ keycloak_db_name }}"
+                ssl_mode: "{{ 'verify-ca' if internal_tls | default(false) | bool else 'prefer' }}"
+                ca_cert: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
+                query: DROP TABLE IF EXISTS keelinfra_crash
+              changed_when: true
+
+            - name: Remove the drill directory
+              ansible.builtin.file:
+                path: "{{ crash_dir }}"
+                state: absent
 
 - name: Restore drill
   hosts: backup_repo

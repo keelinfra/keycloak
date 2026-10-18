@@ -8,3 +8,9 @@ postgres_parameters:
   maintenance_work_mem: 128MB
   wal_compression: "on"
   log_min_duration_statement: 1000
+# Synchronous replication: a commit returns only once one replica has it,
+# and Patroni promotes only that replica, so a failover never loses a write
+# Keycloak was told is saved. Costs one network round trip per commit. With
+# one node there is no replica and this does nothing. Set false for
+# asynchronous replication (a failover can then lose the last ~1 MB of WAL).
+postgres_synchronous: true

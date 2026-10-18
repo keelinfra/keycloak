@@ -67,7 +67,9 @@ jobs:
       - name: Start the rig and install with ./try
         env:
           HA_SKIP_BUILD: "1"
-        run: ./try | tee "$RUNNER_TEMP/try.txt"
+        run: |
+          set -o pipefail
+          ./try | tee "$RUNNER_TEMP/try.txt"
 
       - name: Log in from this machine with what ./try printed
         run: |
@@ -85,6 +87,12 @@ jobs:
 
       - name: Drills — failover, restore from both repositories, session across a rolling restart, test alert
         run: dev/ha-exec.sh ./verify --drill all
+
+      - name: Freeze the PostgreSQL leader mid-write; no acknowledged write may be lost
+        run: |
+          set -o pipefail
+          dev/ha-exec.sh ./verify --drill crash | tee "$RUNNER_TEMP/crash.txt"
+          grep -o '✓ .* frozen mid-write.*' "$RUNNER_TEMP/crash.txt" >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Renew every certificate on the running cluster, then check again
         run: |
@@ -187,6 +195,12 @@ jobs:
 
       - name: Drills — failover, restore from both repositories, session across a rolling restart, test alert
         run: dev/ha-exec.sh ./verify --drill all
+
+      - name: Freeze the PostgreSQL leader mid-write; no acknowledged write may be lost
+        run: |
+          set -o pipefail
+          dev/ha-exec.sh ./verify --drill crash | tee "$RUNNER_TEMP/crash.txt"
+          grep -o '✓ .* frozen mid-write.*' "$RUNNER_TEMP/crash.txt" >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Run install a second time
         run: dev/ha-exec.sh ./install
