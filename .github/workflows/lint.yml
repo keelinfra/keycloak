@@ -18,7 +18,7 @@ jobs:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Install pre-commit
-        run: pip install pre-commit
+        run: pip install pre-commit==4.7.0
       # The hooks in .pre-commit-config.yaml: file hygiene, yamllint, ruff,
       # ansible-lint (production profile) and shellcheck (the runner's own).
       - name: pre-commit
