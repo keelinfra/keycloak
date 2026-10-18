@@ -552,27 +552,54 @@
           register: crash_present
           changed_when: false
 
-        - name: Wait for the old leader to come back as a replica, {{ crash_leader }}
-          delegate_to: "{{ crash_writer }}"
-          ansible.builtin.command:
-            cmd: "{{ patronictl }} list -f json"
-          register: crash_after
-          until: >-
-            crash_after.rc == 0 and
-            ((crash_after.stdout | from_json) | selectattr('Member', 'equalto', crash_leader)
-             | selectattr('Role', 'in', ['Replica', 'Sync Standby'])
-             | selectattr('State', 'equalto', 'streaming') | list | length) == 1
-          retries: 40
-          delay: 3
-          changed_when: false
-
         - name: No acknowledged write may be lost
           ansible.builtin.assert:
             that: crash_present.query_result[0].present | int == crash_acked.stdout_lines | length
             fail_msg: >-
               {{ crash_acked.stdout_lines | length - crash_present.query_result[0].present | int }}
               of {{ crash_acked.stdout_lines | length }} acknowledged writes are missing after the takeover.
-            success_msg: >-
+            quiet: true
+
+        # The old leader may hold WAL the others never got: Patroni must
+        # pg_rewind it before it can follow the new leader.
+        - name: Check that the old leader rejoins
+          block:
+            - name: Wait for the old leader to come back as a replica, {{ crash_leader }}
+              delegate_to: "{{ crash_writer }}"
+              ansible.builtin.command:
+                cmd: "{{ patronictl }} list -f json"
+              register: crash_after
+              until: >-
+                crash_after.rc == 0 and
+                ((crash_after.stdout | from_json) | selectattr('Member', 'equalto', crash_leader)
+                 | selectattr('Role', 'in', ['Replica', 'Sync Standby'])
+                 | selectattr('State', 'equalto', 'streaming') | list | length) == 1
+              retries: 40
+              delay: 3
+              changed_when: false
+
+          rescue:
+            - name: Read the Patroni log of the old leader
+              delegate_to: "{{ crash_leader }}"
+              become: true
+              ansible.builtin.command:
+                cmd: journalctl -u patroni -n 40 --no-pager -o short-iso
+              register: crash_journal
+              changed_when: false
+              failed_when: false
+
+            - name: The old leader did not come back
+              ansible.builtin.fail:
+                msg: |-
+                  No acknowledged write was lost, but {{ crash_leader }} did not come back as a
+                  streaming replica within two minutes.
+                  Cluster: {{ crash_after.stdout | default('') }}
+                  Last Patroni log lines on {{ crash_leader }}:
+                  {{ crash_journal.stdout | default('') }}
+
+        - name: Report the crash drill
+          ansible.builtin.debug:
+            msg: >-
               ✓ {{ crash_leader }} frozen mid-write: {{ crash_takeover.stdout | from_json
               | selectattr('Role', 'equalto', 'Leader') | map(attribute='Member') | first }} took over,
               writes paused {{ crash_pause.stdout }} s, {{ crash_acked.stdout_lines | length }}

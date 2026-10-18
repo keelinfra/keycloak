@@ -299,9 +299,10 @@ ANSIBLE_VAULT_PASSWORD_FILE=inventory/.vault_pass ansible-vault view inventory/g
   `./install` on a live cluster to change these settings is not covered by CI yet; do it in a
   maintenance window and run `./verify --drill all` afterwards.
 - **Synchronous replication on a cluster installed before it existed:** `./verify` fails with "No
-  replica is synchronous" until you run `./install` once; it switches replication over without a
-  restart. To keep asynchronous replication, set `postgres_synchronous: false` in
-  `inventory/group_vars/all/` before running it.
+  replica is synchronous" until you run `./install` once. Run it in a maintenance window: it also
+  adds the database access rule a crashed leader needs to rejoin, and restarts Patroni and
+  PostgreSQL on every node to apply it. To keep asynchronous replication, set
+  `postgres_synchronous: false` in `inventory/group_vars/all/` before running it.
 - **Certificates:** `./verify` fails, and CertificateExpiringSoon fires, 30 days before any
   certificate on a node expires. The ones the cluster signs itself (every node's internal
   certificate, and the HTTPS certificate with `tls_mode: selfsigned`) are renewed with
