@@ -119,6 +119,8 @@ fetch_dist() {
   else
     echo "cached: $file" >&2
   fi
+  # The roles check a non-upstream tarball against SHA256SUMS next to it.
+  (cd "$dir" && sha256sum "keycloak-$version.tar.gz" > SHA256SUMS)
   sha256sum "$file" | cut -d' ' -f1
 }
 

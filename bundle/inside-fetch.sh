@@ -15,11 +15,17 @@ python3 -m venv /tmp/venv
 mkdir -p /out/dist /out/collections
 get() { curl -fsSL --retry 4 -o "$2" "$1"; }
 
-# Keycloak: the upstream tarball, or the LTS build passed with --dist-url.
+# Keycloak: the upstream tarball, checked against its .sha1, or the LTS build
+# passed with --dist-url, checked against SHA256SUMS in its release (the same
+# checks roles/keycloak makes online).
 kc_file="$(basename "$DIST_URL")"
 get "$DIST_URL" "/out/dist/$kc_file"
-if curl -fsSL -o /tmp/kc.sha1 "$DIST_URL.sha1" 2>/dev/null; then
+if [[ "$DIST_URL" == https://github.com/keycloak/keycloak/releases/* ]]; then
+  get "$DIST_URL.sha1" /tmp/kc.sha1
   echo "$(cut -d' ' -f1 /tmp/kc.sha1)  /out/dist/$kc_file" | sha1sum -c --quiet
+else
+  get "$(dirname "$DIST_URL")/SHA256SUMS" /tmp/kc.sums
+  (cd /out/dist && grep " $kc_file\$" /tmp/kc.sums | sha256sum -c --quiet)
 fi
 
 # etcd, checked against the release's SHA256SUMS.
@@ -37,7 +43,10 @@ cli_url="$(cd /src && ANSIBLE_LOCALHOST_WARNING=False /tmp/venv/bin/ansible loca
   -m ansible.builtin.debug -a 'msg={{ config_cli_jar_url }}' 2>/dev/null \
   | sed -n 's/.*"msg": "\(.*\)".*/\1/p')"
 [[ "$cli_url" == https://* ]] || { echo "error: could not resolve config_cli_jar_url" >&2; exit 1; }
-get "$cli_url" "/out/dist/$(basename "$cli_url")"
+cli_file="$(basename "$cli_url")"
+get "$cli_url" "/out/dist/$cli_file"
+get "$cli_url.sha256" /tmp/cli.sums
+(cd /out/dist && grep " $cli_file\$" /tmp/cli.sums | sha256sum -c --quiet)
 
 # Rocky Linux packages none of the Prometheus tools; roles/monitoring
 # installs the upstream releases listed in its defaults. Each is checked

@@ -58,7 +58,7 @@ handle it as described in [CVE-POLICY.md](CVE-POLICY.md).
 | Vulnerabilities fixed without delay, with free security updates and a public advisory (Annex I part II) | [SECURITY.md](SECURITY.md); fixes ship on `main` and in the next release, with a GitHub security advisory |
 | A stated support period (Article 13(8), Annex II) | [SECURITY.md](SECURITY.md#supported-versions) |
 | An SBOM covering at least the top-level dependencies (Annex I part II) | Releases from October 2026 on carry a CycloneDX SBOM: the distribution's lists the components it installs and their versions; an LTS build's lists the libraries inside the Keycloak server |
-| Updates whose integrity users can check (Annex I part I) | Every release carries `SHA256SUMS`; from October 2026 on, also signed build-provenance and SBOM attestations: `gh attestation verify <file> --repo keelinfra/keycloak` shows it came unmodified from our release workflow |
+| Updates whose integrity users can check (Annex I part I) | Every release carries `SHA256SUMS`; from October 2026 on, also signed build-provenance and SBOM attestations: `gh attestation verify <file> --repo keelinfra/keycloak` shows it came unmodified from our release workflow. What the distribution downloads onto your nodes (the Keycloak server, etcd, keycloak-config-cli, the Prometheus components) is checked against the checksums its publisher releases with it, online and when an offline bundle is built; packages come through the operating system's signed repositories |
 | Secure by default (Annex I part I) | TLS to Keycloak and between every node, secrets in ansible-vault, key-only SSH: see [DEPLOYMENT.md](DEPLOYMENT.md) |
 | Monitoring and handling vulnerabilities in components (Article 13(5)–(6)) | [CVE-POLICY.md](CVE-POLICY.md): we track upstream releases, sort CVEs by what they reach, and drill the upgrade that fixes them. A daily [workflow](.github/workflows/cra-monitor.yml) checks the SBOM of every release still in its support period against OSV and opens an issue when a vulnerability in it is actively exploited (CISA KEV, ENISA EUVD) |
 | Information for users: secure installation, use and upgrade (Annex II) | [DEPLOYMENT.md](DEPLOYMENT.md), [UPGRADES.md](UPGRADES.md), [RUNBOOKS.md](RUNBOOKS.md) |
@@ -67,9 +67,6 @@ handle it as described in [CVE-POLICY.md](CVE-POLICY.md).
 
 - **Written cybersecurity risk assessment** for each product (Article 13(2)).
 - **Technical documentation** gathered per Annex VII, public in this repository.
-- **Checksums for every download.** The Prometheus components are already
-  checked against upstream `sha256sums.txt`; the Keycloak server, etcd and
-  keycloak-config-cli downloads are not yet.
 - **EU declaration of conformity and CE marking**, once the assessment above is
   done.
 

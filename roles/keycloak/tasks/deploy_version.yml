@@ -18,6 +18,7 @@
       vars:
         artifact_url: "{{ keycloak_dist_url }}"
         artifact_dest: /tmp/keycloak-{{ keycloak_version }}.tar.gz
+        artifact_checksum: "{{ keycloak_dist_checksum }}"
 
     - name: Unpack distribution
       ansible.builtin.unarchive:

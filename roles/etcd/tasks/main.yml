@@ -38,6 +38,7 @@
           https://github.com/etcd-io/etcd/releases/download/v{{ etcd_version
           }}/etcd-v{{ etcd_version }}-linux-{{ etcd_arch_map[ansible_architecture] }}.tar.gz
         artifact_dest: /tmp/etcd-{{ etcd_version }}.tar.gz
+        artifact_checksum: "sha256:https://github.com/etcd-io/etcd/releases/download/v{{ etcd_version }}/SHA256SUMS"
 
     - name: Extract etcd binaries
       ansible.builtin.unarchive:
