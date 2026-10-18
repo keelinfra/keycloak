@@ -79,3 +79,36 @@
       community.postgresql.postgresql_db:
         name: "{{ keycloak_db_name }}"
         owner: "{{ keycloak_db_user }}"
+
+# Dynamic Patroni settings live in etcd, not in config.yml: set them through
+# the API so existing clusters change too. Any member can write them.
+- name: Decide on synchronous replication
+  ansible.builtin.set_fact:
+    postgres_want_sync: "{{ postgres_synchronous | bool and groups['postgres'] | length > 1 }}"
+  run_once: true
+
+- name: Read Patroni's dynamic configuration
+  ansible.builtin.uri:
+    url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/config"
+    ca_path: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
+    return_content: true
+  register: patroni_dynamic
+  run_once: true
+  changed_when: false
+
+- name: Set synchronous replication
+  ansible.builtin.uri:
+    url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/config"
+    ca_path: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
+    method: PATCH
+    user: patroni
+    password: "{{ vault_patroni_api_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      synchronous_mode: "{{ postgres_want_sync | bool }}"
+      synchronous_mode_strict: false
+    status_code: 200
+  run_once: true
+  changed_when: true
+  when: patroni_dynamic.json.synchronous_mode | default(false) | bool != postgres_want_sync | bool

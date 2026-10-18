@@ -59,6 +59,10 @@ postgresql:
   pg_hba:
     - local all all peer
     - host all all 127.0.0.1/32 scram-sha-256
+    # Patroni reads this node's timeline over a replication connection to
+    # localhost. Without it, a leader that crashed and lost its place never
+    # gets pg_rewind and stays a broken replica on its old timeline.
+    - host replication replicator 127.0.0.1/32 scram-sha-256
 {% for node in cluster_nodes %}
     - {{ 'hostssl' if internal_tls | default(false) | bool else 'host' }} all all {{ node.host }}/32 scram-sha-256
     - {{ 'hostssl' if internal_tls | default(false) | bool else 'host' }} replication replicator {{ node.host }}/32 scram-sha-256

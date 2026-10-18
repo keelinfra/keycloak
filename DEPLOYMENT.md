@@ -16,7 +16,7 @@ Three identical nodes. Each one runs:
 |---|---|---|
 | HAProxy | Public entrypoint: TLS passthrough to every healthy Keycloak node | 443 |
 | Keycloak | The identity server, clustered (Infinispan, JDBC-ping discovery) | 8443, 9000 (health, metrics), 7800 (cluster) |
-| PostgreSQL 17 + Patroni | Database with one leader and two streaming replicas, automatic failover | 5432, 8008 (Patroni API) |
+| PostgreSQL 17 + Patroni | Database with one leader and two replicas, one of them synchronous; automatic failover | 5432, 8008 (Patroni API) |
 | HAProxy (local) | Sends Keycloak's database connections to the current Patroni leader | 127.0.0.1:5433 |
 | etcd | Leader election for Patroni; needs two of three nodes up | 2379, 2380 |
 | pgBackRest | WAL archiving and backups | ssh between nodes |
@@ -38,8 +38,14 @@ provide.
 What survives what, on a 3-node cluster:
 
 - **One node down:** logins keep working through the other two nodes' HAProxy. If it was the
-  PostgreSQL leader, Patroni promotes a replica. `./verify --drill failover` and
-  `./verify --drill session` exercise both, and CI runs them on three nodes.
+  PostgreSQL leader, Patroni promotes the synchronous replica: every commit waits until that
+  replica has it, so a failover loses no write Keycloak was told is saved. Writes pause until
+  the leader's lock expires (`ttl`, 30 s) and the new leader is promoted. `./verify --drill failover`,
+  `./verify --drill crash` and `./verify --drill session` exercise this, and CI runs them on three
+  nodes.
+- **One replica down:** the other becomes the synchronous one within a Patroni loop (10 s);
+  commits wait for that long. With both replicas down, the leader keeps accepting writes
+  without a synchronous copy rather than stopping (`synchronous_mode_strict: false`).
 - **Two nodes down:** etcd loses quorum and PostgreSQL stops accepting writes. Keycloak cannot
   serve logins. Three nodes tolerate one failure, not two.
 - **The first node down:** the cluster keeps serving, but backups, Prometheus, Alertmanager and
@@ -175,7 +181,14 @@ to run.
 ./verify --drill session     # rolling restart of every Keycloak node; sessions must survive
 ./verify --drill alert       # send a test alert; every configured receiver must accept it
 ./verify --drill all         # all of the above
+./verify --drill crash       # freeze the PostgreSQL leader mid-write; no acknowledged write may be lost
 ```
+
+`--drill crash` freezes every process of Patroni and PostgreSQL on the leader, as a hung machine
+or a cut network would, while another node writes through its load balancer. It checks that every
+write PostgreSQL acknowledged is on the new leader, reports how long writes paused, and thaws the
+old leader, which must come back as a replica. Writes pause for about half a minute, so it is not
+part of `all`; run it before go-live, not on a busy production cluster.
 
 `./verify` (health) fails if a component is down, if any backup repository has no backup, if any
 Prometheus target is not being scraped, if any metric an alert rule or the dashboard depends on
@@ -285,6 +298,11 @@ ANSIBLE_VAULT_PASSWORD_FILE=inventory/.vault_pass ansible-vault view inventory/g
   `./configure` (with the credential variables if they changed) and `./install`. Re-running
   `./install` on a live cluster to change these settings is not covered by CI yet; do it in a
   maintenance window and run `./verify --drill all` afterwards.
+- **Synchronous replication on a cluster installed before it existed:** `./verify` fails with "No
+  replica is synchronous" until you run `./install` once. Run it in a maintenance window: it also
+  adds the database access rule a crashed leader needs to rejoin, and restarts Patroni and
+  PostgreSQL on every node to apply it. To keep asynchronous replication, set
+  `postgres_synchronous: false` in `inventory/group_vars/all/` before running it.
 - **Certificates:** `./verify` fails, and CertificateExpiringSoon fires, 30 days before any
   certificate on a node expires. The ones the cluster signs itself (every node's internal
   certificate, and the HTTPS certificate with `tls_mode: selfsigned`) are renewed with

@@ -26,7 +26,7 @@ keelinfra is the third option: a distribution you run yourself, with a subscript
 ## What you get
 
 - **HA Keycloak cluster** — multi-node, DB-persisted sessions, load balancer, TLS for users and between the nodes (etcd, PostgreSQL, Patroni, metrics, all checked by `./verify`)
-- **PostgreSQL HA** — Patroni-managed, automatic failover
+- **PostgreSQL HA** — Patroni-managed, automatic failover, synchronous replication: a failover loses no saved write
 - **Backups & PITR** — pgBackRest, scheduled, restore-tested; optional encrypted off-site copy to any S3-compatible bucket
 - **Observability** — Prometheus metrics and alert rules for the things that actually page you, Alertmanager routing to a webhook or email, and a Grafana overview dashboard
 - **Config as code** — realms, clients, and roles managed via keycloak-config-cli
@@ -77,6 +77,7 @@ Every claim above is a drill you can run against your own cluster:
 ```bash
 ./verify                     # health of every component
 ./verify --drill failover    # switch the PostgreSQL leader over, write through it
+./verify --drill crash       # freeze the leader mid-write; no acknowledged write may be lost
 ./verify --drill restore     # restore the latest backup of every repository to a scratch directory
 ./verify --drill session     # rolling-restart every node; logins must survive
 ./verify --drill alert       # send a test alert; every configured receiver must accept it
