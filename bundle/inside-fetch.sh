@@ -15,12 +15,24 @@ python3 -m venv /tmp/venv
 mkdir -p /out/dist /out/collections
 get() { curl -fsSL --retry 4 -o "$2" "$1"; }
 
-# Keycloak: the upstream tarball, or the LTS build passed with --dist-url.
+# Keycloak: the upstream tarball or the LTS build passed with --dist-url,
+# checked as roles/keycloak checks it online (keycloak_dist_checksum: an
+# algorithm, then a digest or the URL of a checksum file).
 kc_file="$(basename "$DIST_URL")"
 get "$DIST_URL" "/out/dist/$kc_file"
-if curl -fsSL -o /tmp/kc.sha1 "$DIST_URL.sha1" 2>/dev/null; then
-  echo "$(cut -d' ' -f1 /tmp/kc.sha1)  /out/dist/$kc_file" | sha1sum -c --quiet
+kc_sum="$(cd /src && ANSIBLE_LOCALHOST_WARNING=False /tmp/venv/bin/ansible localhost -c local \
+  -e @roles/keycloak/defaults/main.yml -e "keycloak_version=$VERSION" -e "keycloak_dist_url=$DIST_URL" \
+  -m ansible.builtin.debug -a 'msg={{ keycloak_dist_checksum }}' 2>/dev/null \
+  | sed -n 's/.*"msg": "\(.*\)".*/\1/p')"
+kc_algo="${kc_sum%%:*}" kc_digest="${kc_sum#*:}"
+[[ "$kc_algo" =~ ^sha(1|256|512)$ ]] || { echo "error: could not resolve keycloak_dist_checksum" >&2; exit 1; }
+if [[ "$kc_digest" == http*://* ]]; then
+  get "$kc_digest" /tmp/kc.sums
+  # A bare digest, or "<digest>  <file>" lines.
+  if [[ "$(wc -w < /tmp/kc.sums)" -eq 1 ]]; then kc_digest="$(cat /tmp/kc.sums)"
+  else kc_digest="$(grep " $kc_file\$" /tmp/kc.sums | cut -d' ' -f1)"; fi
 fi
+echo "$kc_digest  /out/dist/$kc_file" | "${kc_algo}sum" -c --quiet
 
 # etcd, checked against the release's SHA256SUMS.
 etcd_version="$(sed -n 's/^etcd_version: *"\{0,1\}\([0-9.]*\).*/\1/p' /src/roles/etcd/defaults/main.yml)"
@@ -37,7 +49,10 @@ cli_url="$(cd /src && ANSIBLE_LOCALHOST_WARNING=False /tmp/venv/bin/ansible loca
   -m ansible.builtin.debug -a 'msg={{ config_cli_jar_url }}' 2>/dev/null \
   | sed -n 's/.*"msg": "\(.*\)".*/\1/p')"
 [[ "$cli_url" == https://* ]] || { echo "error: could not resolve config_cli_jar_url" >&2; exit 1; }
-get "$cli_url" "/out/dist/$(basename "$cli_url")"
+cli_file="$(basename "$cli_url")"
+get "$cli_url" "/out/dist/$cli_file"
+get "$cli_url.sha256" /tmp/cli.sums
+(cd /out/dist && grep " $cli_file\$" /tmp/cli.sums | sha256sum -c --quiet)
 
 # Rocky Linux packages none of the Prometheus tools; roles/monitoring
 # installs the upstream releases listed in its defaults. Each is checked

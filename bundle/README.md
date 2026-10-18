@@ -18,7 +18,8 @@ bundle/build.sh --version 26.2.16 \
 ```
 
 It writes `.dev/bundle/keelinfra-keycloak-offline-<version>-<os>-<arch>.tar.gz`
-and a `.sha256` file next to it. Versions of etcd,
+and a `.sha256` file next to it. Every release artifact in it is checked against
+its publisher's checksums while the bundle is built. Versions of etcd,
 keycloak-config-cli and PostgreSQL are read from the roles in the checkout
 that builds the bundle, so build from the same checkout you install with.
 

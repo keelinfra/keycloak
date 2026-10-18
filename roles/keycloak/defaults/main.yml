@@ -5,6 +5,30 @@ keycloak_conf_dir: /etc/keycloak
 # no upstream release artifact — e.g. an LTS build produced by
 # lts/build-from-tag.sh from an upstream maintenance tag (see lts/).
 keycloak_dist_url: "https://github.com/keycloak/keycloak/releases/download/{{ keycloak_version }}/keycloak-{{ keycloak_version }}.tar.gz"
+# Checked on download. Upstream releases publish a .sha1 next to the
+# tarball; keelinfra LTS builds publish SHA256SUMS in the same release. For
+# a tarball from anywhere else, set it yourself, e.g. "sha256:<hex>".
+keycloak_dist_checksum: >-
+  {{ ('sha512:' ~ keycloak_dist_pinned_sha512[keycloak_version])
+     if keycloak_dist_url is match('https://github.com/keycloak/keycloak/releases/')
+        and keycloak_version in keycloak_dist_pinned_sha512
+     else ('sha1:' ~ keycloak_dist_url ~ '.sha1')
+     if keycloak_dist_url is match('https://github.com/keycloak/keycloak/releases/')
+     else ('sha256:' ~ (keycloak_dist_url | dirname) ~ '/SHA256SUMS') }}
+# Upstream releases published without a .sha1: the SHA-512 Maven Central
+# publishes for the same file (org.keycloak:keycloak-quarkus-dist), checked
+# against the GitHub tarball when added here.
+keycloak_dist_pinned_sha512:
+  "26.7.0":
+    e9b5e902fc8217571defc828e1e640870877cbc32ba2c9f07dc27156e2c84f45e784b9e43b7003b254be3ebdea0481d3d1260242824adaac5503c01acc472b53
+  "26.7.1":
+    85fc3f5f9cba35ee9faf8fbefcfdb40c6e2f175811c1ba4662a57fb4b88e78266530c299b942462bcfaf05a870a1888c4840555104a0f5cb80ca53be8d6fe34a
+  "26.7.2":
+    625d1f2c1f6319c386886c9090b733d7913ad043d35da088dda1f0b823ed60a4937fcde50aa834420d9e0fccf0bc7c22a9ab211b18cc179cca526596517ef689
+  "26.7.3":
+    664c8ac2997d94b69825af70acc3a6017a7a53a1504a6e21b2d82a04e5f53593b30cabdf80ffe3eb661f13442a57fbc15c4186a1899f2841e8145532e5ae7e1c
+  "26.7.4":
+    91cdd7d591500a138440313a816177b896555fdaef515a628b1244043b214c676021b3e9e740d85c7b7990bb23342e384b775963a7b4f37461bb46a11bfbf41e
 keycloak_heap: "-Xms512m -Xmx1024m"
 # Through the local HAProxy to the leader. With internal TLS the driver
 # checks the leader's certificate against the internal CA; verify-ca, not

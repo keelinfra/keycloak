@@ -17,6 +17,7 @@
   vars:
     artifact_url: "{{ config_cli_jar_url }}"
     artifact_dest: "{{ config_cli_dir }}/keycloak-config-cli.jar"
+    artifact_checksum: "sha256:{{ config_cli_jar_url }}.sha256"
     artifact_owner: keycloak
     artifact_group: keycloak
     artifact_mode: "0640"
