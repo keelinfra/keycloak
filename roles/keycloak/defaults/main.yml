@@ -30,6 +30,9 @@ keycloak_dist_pinned_sha512:
   "26.7.4":
     91cdd7d591500a138440313a816177b896555fdaef515a628b1244043b214c676021b3e9e740d85c7b7990bb23342e384b775963a7b4f37461bb46a11bfbf41e
 keycloak_heap: "-Xms512m -Xmx1024m"
+# The address users reach Keycloak at. Set it when that is not
+# https://<domain> on port 443, e.g. behind a port mapping (./try does).
+keycloak_public_url: "https://{{ keycloak_domain }}"
 # Through the local HAProxy to the leader. With internal TLS the driver
 # checks the leader's certificate against the internal CA; verify-ca, not
 # verify-full, since the driver only sees 127.0.0.1.

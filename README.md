@@ -34,6 +34,19 @@ keelinfra is the third option: a distribution you run yourself, with a subscript
 
 ## Quick start
 
+Just want to look first? On any machine with Docker (about 10 GB of memory for it):
+
+```bash
+git clone https://github.com/keelinfra/keycloak
+cd keycloak
+./try          # 3-node cluster in containers; prints the admin console URL and password
+./try --down   # remove it
+```
+
+`./try` starts three containers standing in for three servers and runs the same `./install` on them as on real machines. On a 4-core GitHub runner it takes 7 minutes, after a first build of the container images. Then stop a node, run the drills below with `dev/ha-exec.sh ./verify --drill failover`, and watch the console keep working. It is for a look, not for production.
+
+On your own machines:
+
 ```bash
 git clone https://github.com/keelinfra/keycloak
 cd keycloak

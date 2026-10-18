@@ -1,0 +1,8 @@
+---
+# Added by dev/ha-up.sh --publish PORT: kc-node1's load balancer on
+# 127.0.0.1:PORT of the host, so a browser on this machine reaches Keycloak
+# (on macOS the rig's bridge addresses are not routable from the host).
+services:
+  kc-node1:
+    ports:
+      - "127.0.0.1:${HA_PUBLISH}:443"
