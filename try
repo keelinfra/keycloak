@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# keelinfra/keycloak — try: a 3-node Keycloak cluster on this machine, in Docker.
+# Starts three containers standing in for three servers, installs the full
+# stack on them (the same ./install as on real machines) and prints where to
+# log in. For a look, not for production.
+#
+# Usage: ./try [--port 8443] [--version 26.8.1] [--os ubuntu24.04|rocky9|alma9]
+#        ./try --down        remove the cluster
+# Needs Docker with the Compose v2 plugin and about 10 GB of memory for Docker.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+PORT=8443 UP_ARGS=() DOWN=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --port)    PORT="$2"; shift 2 ;;
+    --version) UP_ARGS+=(--version "$2"); shift 2 ;;
+    --os)      UP_ARGS+=(--os "$2"); shift 2 ;;
+    --down)    DOWN=1; shift ;;
+    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
+    *) echo "unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+[[ "$PORT" =~ ^[0-9]+$ ]] || { echo "error: --port must be a number" >&2; exit 1; }
+
+if [[ "$DOWN" == 1 ]]; then
+  exec dev/ha-down.sh
+fi
+
+command -v docker >/dev/null || { echo "error: Docker is not installed (https://docs.docker.com/get-docker/)" >&2; exit 1; }
+docker info >/dev/null 2>&1 || { echo "error: Docker is not running" >&2; exit 1; }
+mem_gb=$(( $(docker info --format '{{.MemTotal}}') / 1024 / 1024 / 1024 ))
+if (( mem_gb < 9 )); then
+  echo "warning: Docker has ${mem_gb} GB of memory; the three nodes need about 10 GB." >&2
+  echo "         Raise it in Docker Desktop (Settings > Resources) if the install fails." >&2
+fi
+if [[ -f inventory/hosts.yml && ! -f .dev/containers/cluster.yml ]]; then
+  echo "error: inventory/ belongs to another cluster; ./try would overwrite it. Use a fresh clone." >&2
+  exit 1
+fi
+
+start=$SECONDS
+dev/ha-up.sh --force --domain localhost --publish "$PORT" "${UP_ARGS[@]}"
+
+# Keycloak answers on the host port; tell it so, or it sends the browser to
+# port 443. A file of its own in the inventory survives ./upgrade.
+dev/ha-exec.sh sh -c "printf -- '---\nkeycloak_public_url: https://localhost:$PORT\n' > inventory/group_vars/all/try.yml"
+dev/ha-exec.sh ./install
+
+password=$(dev/ha-exec.sh ansible-vault view --vault-password-file inventory/.vault_pass \
+  inventory/group_vars/all/vault.yml | sed -n 's/^vault_keycloak_admin_password: *"\{0,1\}\([^"]*\)"\{0,1\}$/\1/p')
+mins=$(( (SECONDS - start + 59) / 60 ))
+
+cat <<EOF
+
+✓ 3-node Keycloak cluster up in ${mins} minutes.
+
+  Admin console:  https://localhost:$PORT/admin
+  User:           admin
+  Password:       $password
+
+  The certificate is self-signed: accept the browser warning.
+
+  Things to try:
+    dev/ha-exec.sh ./verify                    # health of every component
+    dev/ha-exec.sh ./verify --drill failover   # move the database leader, keep writing
+    dev/ha-exec.sh ./verify --drill session    # restart every node; your login survives
+    docker stop kc-node2                       # lose a node; the console keeps working
+    dev/ha-exec.sh ./replace-node kc-node2     # and get it back
+
+  Remove it all:  ./try --down
+EOF

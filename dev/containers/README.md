@@ -54,7 +54,10 @@ definition it writes is `.dev/containers/cluster.yml`. A node is reached
 with `docker exec -it kc-node2 bash`. Keycloak answers on every node's
 HAProxy (`https://172.28.0.11/`, self-signed, host name `sso.ha.local`) and
 on its own port 8443. On macOS the bridge addresses are not routable from
-the host; go through `dev/ha-exec.sh curl ...` or `docker exec`.
+the host; go through `dev/ha-exec.sh curl ...` or `docker exec`, or start
+the rig with `--publish 8443` to map kc-node1's load balancer to
+`127.0.0.1:8443` on the host. `./try` at the repo root does that, with
+`--domain localhost`, installs, and prints the admin password.
 
 Requirements: Docker Engine 24+ or Docker Desktop with the Compose v2
 plugin, and about 10 GB of memory for the three nodes. Keycloak and

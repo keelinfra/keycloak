@@ -18,6 +18,7 @@ on:
       - dev/ha-*.sh
       - dev/restore-check.yml
       - dev/rebuild-check.yml
+      - try
       - .github/workflows/ha-smoke.yml
   pull_request:
     paths:
@@ -27,6 +28,7 @@ on:
       - dev/ha-*.sh
       - dev/restore-check.yml
       - dev/rebuild-check.yml
+      - try
       - .github/workflows/ha-smoke.yml
   workflow_dispatch:
 
@@ -60,11 +62,23 @@ jobs:
           docker buildx bake -f compose.yml --load --allow "fs.read=$(cd ../.. && pwd)" \
             --set '*.cache-from=type=gha' --set '*.cache-to=type=gha,mode=max'
 
-      - name: Start the rig and configure
-        run: dev/ha-up.sh --no-build
+      # Through ./try, the one command a first-time visitor runs: up,
+      # configure and install, Keycloak published on localhost:8443.
+      - name: Start the rig and install with ./try
+        env:
+          HA_SKIP_BUILD: "1"
+        run: ./try | tee "$RUNNER_TEMP/try.txt"
 
-      - name: Install
-        run: dev/ha-exec.sh ./install
+      - name: Log in from this machine with what ./try printed
+        run: |
+          password=$(sed -n 's/^ *Password: *//p' "$RUNNER_TEMP/try.txt")
+          test -n "$password"
+          issuer=$(curl -fsSk https://localhost:8443/realms/master/.well-known/openid-configuration | jq -r .issuer)
+          test "$issuer" = https://localhost:8443/realms/master
+          curl -fsSk https://localhost:8443/realms/master/protocol/openid-connect/token \
+            -d grant_type=password -d client_id=admin-cli -d username=admin \
+            --data-urlencode "password=$password" | jq -e .access_token > /dev/null
+          curl -fsSk -o /dev/null https://localhost:8443/admin/master/console/
 
       - name: Health checks
         run: dev/ha-exec.sh ./verify

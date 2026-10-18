@@ -23,7 +23,14 @@ case "$HA_OS" in
 esac
 export HA_NODE_TARGET
 
-ha_compose() { docker compose -f "$HA_COMPOSE_FILE" "$@"; }
+# Host port mapped to kc-node1's HTTPS (dev/ha-up.sh --publish, used by ./try).
+HA_PUBLISH="${HA_PUBLISH:-$(cat "$HA_STATE_DIR/publish" 2>/dev/null || true)}"
+
+ha_compose() {
+  local files=(-f "$HA_COMPOSE_FILE")
+  [[ -z "${HA_PUBLISH:-}" ]] || files+=(-f "$HA_ROOT/dev/containers/publish.yml")
+  HA_PUBLISH="${HA_PUBLISH:-}" docker compose "${files[@]}" "$@"
+}
 
 # Run a command in the control container, in /work (the repo root).
 # ANSIBLE_* variables from the caller's environment are passed through.

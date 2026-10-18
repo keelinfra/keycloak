@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Bring up the 3-node container rig and configure the repo against it.
 # Usage: dev/ha-up.sh [--version 26.8.1] [--os ubuntu24.04|rocky9|alma9] [--no-build] [--force]
-#                     [--offline <bundle.tar.gz>]
+#                     [--offline <bundle.tar.gz>] [--domain sso.ha.local] [--publish PORT]
 # --offline cuts the nodes off from the internet and configures from a bundle
 # (bundle/build.sh); the bundle must sit inside the repo, which the control
-# container sees as /work.
+# container sees as /work. --publish maps kc-node1's HTTPS to 127.0.0.1:PORT
+# on this machine (./try uses it with --domain localhost).
 # Then:  dev/ha-exec.sh ./install && dev/ha-exec.sh ./verify --drill all
 # Down:  dev/ha-down.sh            Details: dev/containers/README.md
 set -euo pipefail
@@ -16,7 +17,7 @@ done
 source "$(dirname "$0")/containers/lib.sh"
 cd "$HA_ROOT"
 
-VERSION="26.8.1" BUILD=1 FORCE=0 OFFLINE=""
+VERSION="26.8.1" BUILD=1 FORCE=0 OFFLINE="" DOMAIN="sso.ha.local" PUBLISH=""
 [[ "${HA_SKIP_BUILD:-0}" == "1" ]] && BUILD=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -25,11 +26,15 @@ while [[ $# -gt 0 ]]; do
     --force)    FORCE=1; shift ;;
     --offline)  OFFLINE="$2"; shift 2 ;;
     --os)       HA_OS="$2"; shift 2 ;;
-    -h|--help)  sed -n '2,9p' "$0"; exit 0 ;;
+    --domain)   DOMAIN="$2"; shift 2 ;;
+    --publish)  PUBLISH="$2"; shift 2 ;;
+    -h|--help)  sed -n '2,11p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 [[ "$VERSION" =~ ^26\.[0-9]+\.[0-9]+$ ]] || { echo "error: --version must look like 26.x.y" >&2; exit 1; }
+[[ -z "$PUBLISH" || "$PUBLISH" =~ ^[0-9]+$ ]] || { echo "error: --publish must be a port number" >&2; exit 1; }
+HA_PUBLISH="$PUBLISH"
 ha_require_docker
 if [[ -n "$OFFLINE" ]]; then
   [[ -f "$OFFLINE" ]] || { echo "error: offline bundle not found: $OFFLINE" >&2; exit 1; }
@@ -37,7 +42,6 @@ if [[ -n "$OFFLINE" ]]; then
   [[ "$OFFLINE_ABS" == "$HA_ROOT"/* ]] || { echo "error: the bundle must be inside the repo ($HA_ROOT)" >&2; exit 1; }
   OFFLINE_WORK="/work/${OFFLINE_ABS#"$HA_ROOT"/}"
 fi
-command -v ssh-keygen >/dev/null || { echo "error: ssh-keygen not found (install the OpenSSH client)" >&2; exit 1; }
 
 # inventory/ is rendered for one cluster at a time. Do not overwrite one that
 # belongs to a Multipass (dev/up.sh) or real cluster.
@@ -49,9 +53,7 @@ fi
 
 mkdir -p "$HA_STATE_DIR" .dev/dist-cache
 echo "$HA_OS" > "$HA_STATE_DIR/os"
-if [[ ! -f "$HA_STATE_DIR/id_ed25519" ]]; then
-  ssh-keygen -q -t ed25519 -N "" -C "kc-ha rig" -f "$HA_STATE_DIR/id_ed25519"
-fi
+if [[ -n "$PUBLISH" ]]; then echo "$PUBLISH" > "$HA_STATE_DIR/publish"; else rm -f "$HA_STATE_DIR/publish"; fi
 
 if [[ "$BUILD" == 1 ]]; then
   ha_group "Build rig images"
@@ -62,6 +64,9 @@ fi
 ha_group "Start containers"
 ha_compose up -d --wait --no-build
 ha_endgroup
+
+# Made in the control container, so this machine needs no ssh client.
+ha_control sh -c '[ -f .dev/containers/id_ed25519 ] || ssh-keygen -q -t ed25519 -N "" -C "kc-ha rig" -f .dev/containers/id_ed25519'
 
 ha_group "Start the S3 bucket and alert webhook stand-ins"
 ha_control dev/containers/services-up.sh "$HA_CONTROL_IP"
@@ -92,7 +97,7 @@ nodes:
     name: ${HA_NODES[2]}
 ssh_user: $HA_SSH_USER
 ssh_private_key: /work/.dev/containers/id_ed25519
-domain: sso.ha.local
+domain: $DOMAIN
 vip: ""
 keycloak_version: "$VERSION"
 tls_mode: selfsigned

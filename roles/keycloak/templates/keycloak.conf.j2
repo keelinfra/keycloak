@@ -4,7 +4,7 @@ db-url={{ keycloak_db_url }}
 db-username={{ keycloak_db_user }}
 db-password={{ vault_keycloak_db_password }}
 
-hostname=https://{{ keycloak_domain }}
+hostname={{ keycloak_public_url }}
 http-enabled=false
 https-port={{ keycloak_https_port }}
 https-certificate-file={{ tls_dir }}/server.crt
