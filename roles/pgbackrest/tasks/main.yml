@@ -68,6 +68,11 @@
 # lets a replica fetch from there the WAL the leader no longer keeps. Without
 # it, a node that was down longer than Patroni holds its replication slot
 # (30 minutes) comes back as a replica that never catches up.
+# The setting reaches every node, and ./replace-node starts PostgreSQL on a new
+# machine before this role installs pgBackRest there. A missing pgbackrest must
+# read as "not in the archive" (exit 1), so the replica streams from the leader
+# instead: on the shell's 127 for a command not found, PostgreSQL refuses to
+# start. dash's command -v returns 127 as well, hence the explicit exit 1.
 - name: Point Patroni archive_command and restore_command at pgBackRest
   ansible.builtin.uri:
     url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/config"
@@ -82,7 +87,9 @@
         parameters:
           archive_command: "pgbackrest --stanza={{ pgbackrest_stanza }} archive-push %p"
         recovery_conf:
-          restore_command: 'pgbackrest --stanza={{ pgbackrest_stanza }} archive-get %f "%p"'
+          restore_command: >-
+            command -v pgbackrest > /dev/null || exit 1;
+            pgbackrest --stanza={{ pgbackrest_stanza }} archive-get %f "%p"
     status_code: 200
   run_once: true
   changed_when: true
