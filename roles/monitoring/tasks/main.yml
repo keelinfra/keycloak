@@ -32,14 +32,33 @@
   when: internal_tls | default(false) | bool
   register: exporter_tls
 
+# Ubuntu 24.04 packages postgres_exporter 0.15, whose stat_bgwriter collector
+# reads the checkpoint columns PostgreSQL 17 moved to pg_stat_checkpointer:
+# it fails on every scrape and logs an error. 0.17 reads the new view (the
+# RHEL family installs that release). Nothing keelinfra alerts on or graphs
+# uses these metrics, so an older exporter runs without that collector.
+- name: Read the packaged postgres exporter version
+  ansible.builtin.command:
+    cmd: dpkg-query -W -f=${Version} prometheus-postgres-exporter
+  register: pgexp_pkg
+  changed_when: false
+  when: ansible_os_family == 'Debian'
+
 # Local connection over loopback, which pg_hba leaves as plain host.
 - name: Configure postgres exporter connection
+  vars:
+    pgexp_skip_bgwriter: >-
+      {{ ansible_os_family == 'Debian' and postgres_version | int >= 17
+         and pgexp_pkg.stdout | regex_replace('-.*$', '') is version('0.17', '<') }}
+    pgexp_args: >-
+      {{ ([exporter_args] + (['--no-collector.stat_bgwriter'] if pgexp_skip_bgwriter | bool else []))
+         | select | join(' ') }}
   ansible.builtin.copy:
     content: |
       # Managed by keelinfra
       DATA_SOURCE_NAME="postgresql://postgres:{{ vault_postgres_superuser_password
       }}@127.0.0.1:{{ postgres_port }}/postgres?sslmode=disable"
-      ARGS="{{ exporter_args }}"
+      ARGS="{{ pgexp_args }}"
     dest: /etc/default/prometheus-postgres-exporter
     mode: "0600"
   register: pgexp_conf

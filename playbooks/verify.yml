@@ -256,6 +256,31 @@
       delay: 6
       changed_when: false
 
+    # A target can be up while one of its collectors fails on every scrape
+    # (an exporter older than the PostgreSQL it reads).
+    - name: Wait for every PostgreSQL exporter collector to succeed
+      vars:
+        failing_collectors: pg_scrape_collector_success == 0
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port | default(9090) }}/api/v1/query?query={{ failing_collectors | urlencode }}"
+        return_content: true
+      register: pg_collectors
+      until: pg_collectors.json.data.result | default([1]) | length == 0
+      retries: 10
+      delay: 6
+      failed_when: false
+      changed_when: false
+
+    - name: Every PostgreSQL exporter collector succeeds
+      ansible.builtin.assert:
+        that: pg_collectors.json.data.result | default([1]) | length == 0
+        fail_msg: >-
+          The PostgreSQL exporter fails to collect
+          {% for r in pg_collectors.json.data.result | default([]) -%}
+          {{ r.metric.collector }} on {{ r.metric.instance }}{{ '' if loop.last else ', ' }}{% endfor %}.
+          Its log says why: journalctl -u prometheus-postgres-exporter on that node.
+        quiet: true
+
     - name: Refresh the backup metrics
       ansible.builtin.command: /usr/local/bin/pgbackrest-metrics
       changed_when: false
