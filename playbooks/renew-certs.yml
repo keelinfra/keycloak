@@ -4,8 +4,9 @@
 # selfsigned, a new HTTPS certificate), valid tls_cert_days from now.
 #
 # Who picks the new files up, and how:
-# - etcd and the exporters read their certificate files on every new
-#   connection, Prometheus its client certificate likewise: nothing to do.
+# - etcd, the exporters and the Alertmanagers' cluster port read their
+#   certificate files on every new connection, Prometheus its client
+#   certificate likewise: nothing to do.
 # - Patroni's REST API reloads on SIGHUP (systemctl reload patroni).
 # - PostgreSQL reloads its SSL files on pg_reload_conf().
 # - Keycloak re-reads its HTTPS certificate every hour.

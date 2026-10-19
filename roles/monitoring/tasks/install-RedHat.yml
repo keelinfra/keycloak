@@ -29,10 +29,10 @@
   ansible.builtin.include_tasks: install_release.yml
   loop: >-
     {{ monitoring_releases | dict2items
-       | selectattr('value.monitoring_host_only', 'equalto', false) | list
+       | selectattr('value.alerting_only', 'equalto', false) | list
        + ((monitoring_releases | dict2items
-           | selectattr('value.monitoring_host_only', 'equalto', true) | list)
-          if inventory_hostname == monitoring_host else []) }}
+           | selectattr('value.alerting_only', 'equalto', true) | list)
+          if inventory_hostname in alerting_hosts else []) }}
   loop_control:
     loop_var: release
     label: "{{ release.key }} {{ release.value.version }}"
@@ -45,7 +45,7 @@
   loop: "{{ monitoring_el_units | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
-  when: inventory_hostname == monitoring_host or not item.value.monitoring_host_only
+  when: inventory_hostname in alerting_hosts or not item.value.alerting_only
   notify: Restart monitoring services
 
 # Started by the tasks after this file, once their configuration is in place.

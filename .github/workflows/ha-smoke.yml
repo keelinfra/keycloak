@@ -170,6 +170,8 @@ jobs:
       - name: Lose the first node (CAs, backup repository 1, monitoring), replace it, then check the cluster
         run: |
           dev/ha-wipe-node.sh kc-node1
+          # Alerting outlives the first node: the second one sends the alert.
+          dev/ha-wait-alert.sh KeycloakDown kc-node1
           dev/ha-exec.sh ./replace-node kc-node1 --yes
           dev/ha-exec.sh ./verify
 
@@ -281,6 +283,8 @@ jobs:
       - name: Lose the first node (CAs, backup repository 1, monitoring), replace it, then check the cluster
         run: |
           dev/ha-wipe-node.sh kc-node1
+          # Alerting outlives the first node: the second one sends the alert.
+          dev/ha-wait-alert.sh KeycloakDown kc-node1
           dev/ha-exec.sh ./replace-node kc-node1 --yes
           dev/ha-exec.sh ./verify
 

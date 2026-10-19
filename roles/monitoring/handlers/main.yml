@@ -8,4 +8,4 @@
   loop: "{{ monitoring_el_units | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
-  when: inventory_hostname == monitoring_host or not item.value.monitoring_host_only
+  when: inventory_hostname in alerting_hosts or not item.value.alerting_only

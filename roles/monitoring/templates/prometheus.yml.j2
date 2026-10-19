@@ -58,3 +58,9 @@ scrape_configs:
       - targets: ["{{ node.host }}:{{ keycloak_mgmt_port }}"]
         labels: {instance: "{{ node.name }}"}
 {% endfor %}
+
+  # This node's own Alertmanager, for the size of its cluster.
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["127.0.0.1:{{ alertmanager_port }}"]
+        labels: {instance: "{{ inventory_hostname }}"}

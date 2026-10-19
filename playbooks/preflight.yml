@@ -30,6 +30,7 @@
       - { port: 57800, what: Keycloak failure detection (JGroups) }
       - { port: 9090, what: Prometheus }
       - { port: 9093, what: Alertmanager }
+      - { port: 9094, what: Alertmanager cluster }
       - { port: 3000, what: Grafana }
       - { port: 9100, what: node exporter }
       - { port: 9187, what: PostgreSQL exporter }

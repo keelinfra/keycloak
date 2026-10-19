@@ -55,8 +55,9 @@
 
     # Every port one node talks to on another must answer in TLS: etcd
     # (clients, peers), the Patroni API, PostgreSQL, Keycloak (HTTPS,
-    # management, cluster transport) and the exporters Prometheus scrapes.
-    # Not 57800: JGroups failure detection, liveness pings only, stays plain.
+    # management, cluster transport), the exporters Prometheus scrapes and
+    # the Alertmanagers' cluster port. Not 57800: JGroups failure detection,
+    # liveness pings only, stays plain.
     # 7800 only with several nodes: a single node has no cluster peers, and
     # JGroups may bind elsewhere than a loopback node address.
     - name: Check the ports between the nodes speak TLS
@@ -73,6 +74,7 @@
               {{ (node.host ~ ':7800') if cluster_nodes | length > 1 else '' }}
               {{ node.host }}:{{ node_exporter_port | default(9100) }}
               {{ node.host }}:{{ postgres_exporter_port | default(9187) }}
+              {{ (node.host ~ ':9094') if node.name in alerting_hosts and alerting_hosts | length > 1 else '' }}
               {% endfor %}
             executable: python3
           register: tls_probe
@@ -188,8 +190,9 @@
       run_once: true
       when: groups['postgres'] | length > 1
 
+# On each alerting host: either one alone must see every node and alert.
 - name: Backup and monitoring health
-  hosts: monitoring
+  hosts: cluster
   gather_facts: false
   vars:
     backup_repos: "{{ [1, 2] if backup_s3 | default({}) | length > 0 else [1] }}"
@@ -211,6 +214,23 @@
       - node_cpu_seconds_total
       - keelinfra_cert_expiry_timestamp
   tasks:
+    - name: Only the alerting hosts run Prometheus and Alertmanager
+      ansible.builtin.meta: end_host
+      when: inventory_hostname not in alerting_hosts
+
+    - name: Look for Prometheus on this node
+      ansible.builtin.stat:
+        path: /etc/prometheus/prometheus.yml
+      register: prom_config
+
+    - name: Prometheus and Alertmanager are installed here
+      ansible.builtin.assert:
+        that: prom_config.stat.exists
+        fail_msg: >-
+          {{ inventory_hostname }} runs no Prometheus yet. The second node now alerts too, so
+          alerts outlive the first node: run ./install once to set it up (DEPLOYMENT.md, Day two).
+        quiet: true
+
     - name: Every repository holds a backup
       become: true
       become_user: postgres
@@ -233,6 +253,28 @@
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ alertmanager_port | default(9093) }}/-/ready"
       changed_when: false
+
+    - name: Wait for the Alertmanagers to form one cluster
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ alertmanager_port | default(9093) }}/api/v2/status"
+        return_content: true
+      register: am_status
+      until: am_status.json.cluster.peers | default([]) | length == alerting_hosts | length
+      retries: 20
+      delay: 3
+      failed_when: false
+      changed_when: false
+      when: alerting_hosts | length > 1
+
+    - name: Every Alertmanager sees its peer
+      ansible.builtin.assert:
+        that: am_status.json.cluster.peers | default([]) | length == alerting_hosts | length
+        fail_msg: >-
+          The Alertmanager on {{ inventory_hostname }} sees {{ am_status.json.cluster.peers | default([]) | length }}
+          of {{ alerting_hosts | length }} members. The alerting nodes ({{ alerting_hosts | join(', ') }})
+          must reach each other on port 9094; until they do, each sends every alert on its own.
+        quiet: true
+      when: alerting_hosts | length > 1
 
     - name: Prometheus sends alerts to Alertmanager
       ansible.builtin.uri:
@@ -307,6 +349,7 @@
       retries: 10
       delay: 3
       changed_when: false
+      when: inventory_hostname == groups['monitoring'][0]
 
 - name: Failover drill
   hosts: primary
