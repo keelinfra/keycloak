@@ -155,6 +155,39 @@
       run_once: true
       when: postgres_synchronous | default(true) | bool and groups['postgres'] | length > 1
 
+    # Patroni reports a replica as running even when it has lost its place and
+    # can no longer catch up. Streaming means it receives the leader's WAL.
+    # A node that just came back replays from the archive first.
+    - name: Wait for every replica to stream from the leader
+      ansible.builtin.command:
+        cmd: patronictl -c /etc/patroni/config.yml list -f json
+      register: patroni_streaming
+      until: >-
+        (patroni_streaming.stdout | from_json) | rejectattr('Role', 'equalto', 'Leader')
+        | rejectattr('State', 'equalto', 'streaming') | list | length == 0
+      retries: 24
+      delay: 5
+      failed_when: false
+      changed_when: false
+      run_once: true
+      when: groups['postgres'] | length > 1
+
+    - name: Every replica streams from the leader
+      ansible.builtin.assert:
+        that: >-
+          (patroni_streaming.stdout | from_json) | rejectattr('Role', 'equalto', 'Leader')
+          | rejectattr('State', 'equalto', 'streaming') | list | length == 0
+        fail_msg: >-
+          {{ (patroni_streaming.stdout | from_json) | rejectattr('Role', 'equalto', 'Leader')
+          | rejectattr('State', 'equalto', 'streaming') | map(attribute='Member') | join(', ') }}
+          is not streaming from the leader, so it falls behind and cannot take over. If its log
+          says the WAL it needs "has already been removed", run ./install once (it lets replicas
+          fetch WAL from the backup archive) or ./replace-node for that node.
+          Cluster state: {{ patroni_streaming.stdout }}
+        quiet: true
+      run_once: true
+      when: groups['postgres'] | length > 1
+
 - name: Backup and monitoring health
   hosts: monitoring
   gather_facts: false
