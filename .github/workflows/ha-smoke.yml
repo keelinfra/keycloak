@@ -88,18 +88,54 @@ jobs:
         run: ./verify
 
       # What ./try promises: the console keeps working with a node down, and
-      # the node rejoins by itself when it comes back.
-      - name: Stop a node, then start it again
+      # the node catches up by itself when it comes back, even once the leader
+      # has recycled the WAL it missed: it fetches that from the backup
+      # archive. Patroni holds a gone node's replication slot, and so its WAL,
+      # for 30 minutes; member_slots_ttl=0 stands in for a longer outage.
+      - name: Stop a replica until the leader recycles its WAL, then start it again
         run: |
-          docker stop kc-node2
+          leader=$(docker exec kc-node1 patronictl -c /etc/patroni/config.yml list -f json \
+            | jq -r '.[] | select(.Role == "Leader") | .Member')
+          # Not kc-node1: its load balancer is the one published on localhost.
+          node=$(docker exec kc-node1 patronictl -c /etc/patroni/config.yml list -f json \
+            | jq -r '[.[] | select(.Role != "Leader" and .Member != "kc-node1")][0].Member')
+          ctl() { docker exec "$leader" patronictl -c /etc/patroni/config.yml "$@"; }
+          sql() { docker exec -u postgres -w /tmp "$leader" psql -h /var/run/postgresql -d postgres -Atc "$1"; }
+          slot=${node//-/_}
+          echo "leader $leader, stopping $node"
+
+          ctl edit-config --force -s member_slots_ttl=0
+          sql "CREATE TABLE IF NOT EXISTS ci_wal (x int)"
+          docker stop "$node"
+          need=$(sql "SELECT pg_walfile_name(restart_lsn) FROM pg_replication_slots WHERE slot_name = '$slot'")
+          test -n "$need"
           curl -fsSk -o /dev/null --retry 10 --retry-all-errors --retry-delay 3 \
             https://localhost:8443/admin/master/console/
-          docker start kc-node2
+
           for _ in $(seq 30); do
+            [ "$(sql "SELECT count(*) FROM pg_replication_slots WHERE slot_name = '$slot'")" = 0 ] && break
+            sleep 5
+          done
+          for _ in $(seq 16); do
+            sql "INSERT INTO ci_wal VALUES (1)" > /dev/null
+            sql "SELECT pg_switch_wal()" > /dev/null
+          done
+          sleep 10   # let archive_command take the last segments
+          sql "CHECKPOINT"
+          gone=$(sql "SELECT count(*) = 0 FROM pg_ls_waldir() WHERE name = '$need'")
+          echo "$node needs $need from the leader; removed there: $gone"
+          test "$gone" = t
+          ctl edit-config --force -s member_slots_ttl=null
+
+          # ./verify waits up to two minutes for replicas to stream; the loop
+          # covers Keycloak starting on the node.
+          docker start "$node"
+          for _ in $(seq 8); do
             ./verify > /dev/null 2>&1 && break
             sleep 10
           done
           ./verify
+          sql "DROP TABLE ci_wal"
 
       - name: Drills — failover, restore from both repositories, session across a rolling restart, test alert
         run: dev/ha-exec.sh ./verify --drill all

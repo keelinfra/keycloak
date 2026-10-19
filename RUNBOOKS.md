@@ -156,6 +156,10 @@ Patroni will not promote a replica more than 1 MB behind, so a failover may have
 
 - A short burst after a large import or a backup usually clears by itself; the alert waits five
   minutes before firing.
+- A replica whose log says the WAL it needs "has already been removed" was down longer than
+  the leader kept WAL for it, and cannot fetch it from the backups: the cluster was installed
+  before replicas could. Run `./install` once; the replica then catches up from the pgBackRest
+  repositories.
 - A replica that stays behind or stops replaying: `sudo patronictl -c /etc/patroni/config.yml reinit <cluster> <node name>`.
 
 **Get help** if every replica lags at once: that usually points at the leader (disk or load),

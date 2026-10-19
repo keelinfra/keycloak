@@ -64,7 +64,11 @@
   register: stanza_create
   changed_when: "'already exists' not in stanza_create.stdout"
 
-- name: Point Patroni archive_command at pgBackRest
+# archive_command sends every WAL segment to the repositories; restore_command
+# lets a replica fetch from there the WAL the leader no longer keeps. Without
+# it, a node that was down longer than Patroni holds its replication slot
+# (30 minutes) comes back as a replica that never catches up.
+- name: Point Patroni archive_command and restore_command at pgBackRest
   ansible.builtin.uri:
     url: "{{ patroni_api_scheme }}://{{ ansible_host }}:{{ patroni_rest_port }}/config"
     ca_path: "{{ internal_ca_file if internal_tls | default(false) | bool else omit }}"
@@ -77,6 +81,8 @@
       postgresql:
         parameters:
           archive_command: "pgbackrest --stanza={{ pgbackrest_stanza }} archive-push %p"
+        recovery_conf:
+          restore_command: 'pgbackrest --stanza={{ pgbackrest_stanza }} archive-get %f "%p"'
     status_code: 200
   run_once: true
   changed_when: true

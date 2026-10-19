@@ -303,6 +303,11 @@ ANSIBLE_VAULT_PASSWORD_FILE=inventory/.vault_pass ansible-vault view inventory/g
   adds the database access rule a crashed leader needs to rejoin, and restarts Patroni and
   PostgreSQL on every node to apply it. To keep asynchronous replication, set
   `postgres_synchronous: false` in `inventory/group_vars/all/` before running it.
+- **Replicas catching up from the backups, on a cluster installed before they could:** run
+  `./install` once. Until then a node that was down for more than 30 minutes comes back as a
+  replica that never catches up, because the leader no longer keeps the WAL it missed; `./verify`
+  names it ("is not streaming"). Afterwards it fetches that WAL from the pgBackRest repositories.
+  The setting itself takes effect without a restart.
 - **Certificates:** `./verify` fails, and CertificateExpiringSoon fires, 30 days before any
   certificate on a node expires. The ones the cluster signs itself (every node's internal
   certificate, and the HTTPS certificate with `tls_mode: selfsigned`) are renewed with
