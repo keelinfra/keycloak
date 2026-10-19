@@ -40,6 +40,11 @@ dev/ha-down.sh
 dev/ha-drill.sh --from 26.7.3 --to 26.7.5 --strategy rolling   # one matrix row, end to end
 ```
 
+While the rig is up, `./install`, `./verify`, `./upgrade` and the other
+cluster commands, run on the host, hand themselves to the control container:
+`./verify` is `dev/ha-exec.sh ./verify`. On macOS the host cannot reach the
+nodes' addresses, so that is the only way they work there.
+
 `dev/ha-drill.sh` is what the nightly HA matrix runs (`.github/workflows/ha-matrix.yml`):
 it brings the rig up on FROM, logs in, starts `dev/probe.sh` against every
 node's load balancer, runs `./upgrade --to TO`, reads the probes (a rolling

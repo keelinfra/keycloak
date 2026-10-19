@@ -63,11 +63,13 @@ cat <<EOF
   The certificate is self-signed: accept the browser warning.
 
   Things to try:
-    dev/ha-exec.sh ./verify                    # health of every component
-    dev/ha-exec.sh ./verify --drill failover   # move the database leader, keep writing
-    dev/ha-exec.sh ./verify --drill session    # restart every node; your login survives
-    docker stop kc-node2                       # lose a node; the console keeps working
-    dev/ha-exec.sh ./replace-node kc-node2     # and get it back
+    ./verify                       # health of every component
+    ./verify --drill failover      # move the database leader, keep writing
+    ./verify --drill session       # restart every node; your login survives
+    docker stop kc-node2           # lose a node; the console keeps working
+    docker start kc-node2          # bring it back; it rejoins within a minute or two
+    dev/ha-wipe-node.sh kc-node2   # or lose it for good: a blank machine in its place
+    ./replace-node kc-node2        # and install it back into the cluster
 
   Remove it all:  ./try --down
 EOF

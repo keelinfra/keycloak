@@ -3,6 +3,12 @@
 # Usage: ./verify [--drill failover|restore|session|alert|all|crash]
 set -euo pipefail
 cd "$(dirname "$0")"
+# The Docker cluster from ./try: this machine may not reach its nodes (macOS),
+# so run in the cluster's control container instead.
+if [[ -f .dev/containers/cluster.yml ]] && command -v docker >/dev/null; then
+  echo "(./try cluster: running in its control container, as dev/ha-exec.sh ./${0##*/})" >&2
+  exec dev/ha-exec.sh "./${0##*/}" "$@"
+fi
 DRILL="health"
 [[ "${1:-}" == "--drill" ]] && DRILL="${2:-all}"
 [[ -f inventory/hosts.yml ]] || { echo "error: no inventory found — run ./configure first" >&2; exit 1; }

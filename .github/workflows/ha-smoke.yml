@@ -82,8 +82,24 @@ jobs:
             --data-urlencode "password=$password" | jq -e .access_token > /dev/null
           curl -fsSk -o /dev/null https://localhost:8443/admin/master/console/
 
+      # Plain ./verify on this machine: it hands itself to the control
+      # container, as it must on macOS, where the nodes are out of reach.
       - name: Health checks
-        run: dev/ha-exec.sh ./verify
+        run: ./verify
+
+      # What ./try promises: the console keeps working with a node down, and
+      # the node rejoins by itself when it comes back.
+      - name: Stop a node, then start it again
+        run: |
+          docker stop kc-node2
+          curl -fsSk -o /dev/null --retry 10 --retry-all-errors --retry-delay 3 \
+            https://localhost:8443/admin/master/console/
+          docker start kc-node2
+          for _ in $(seq 30); do
+            ./verify > /dev/null 2>&1 && break
+            sleep 10
+          done
+          ./verify
 
       - name: Drills — failover, restore from both repositories, session across a rolling restart, test alert
         run: dev/ha-exec.sh ./verify --drill all
