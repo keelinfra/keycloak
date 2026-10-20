@@ -6,6 +6,9 @@ postgres_exporter_port: 9187
 monitoring_host: "{{ groups['monitoring'][0] }}"
 textfile_dir: /var/lib/prometheus/node-exporter
 alertmanager_port: 9093
+# Where the Alertmanagers on alerting_hosts gossip with each other.
+alertmanager_cluster_port: 9094
+alertmanager_cluster_tls_config: "{{ internal_tls_dir }}/alertmanager-cluster.yml"
 # With internal TLS the exporters serve HTTPS and only answer clients
 # holding a certificate from the internal CA (Prometheus uses the
 # monitoring node's own).
@@ -27,28 +30,28 @@ alerting: {}
 amtool_bin: "{{ '/usr/local/bin/amtool' if ansible_os_family == 'RedHat' else 'amtool' }}"
 
 # RHEL family: upstream releases and the units that run them, named like
-# the Debian packages' units.
+# the Debian packages' units. alerting_only: just on alerting_hosts.
 monitoring_releases:
   node_exporter:
     repo: prometheus/node_exporter
     version: "1.9.1"
     binaries: [node_exporter]
-    monitoring_host_only: false
+    alerting_only: false
   postgres_exporter:
     repo: prometheus-community/postgres_exporter
     version: "0.17.1"
     binaries: [postgres_exporter]
-    monitoring_host_only: false
+    alerting_only: false
   prometheus:
     repo: prometheus/prometheus
     version: "3.5.0"
     binaries: [prometheus, promtool]
-    monitoring_host_only: true
+    alerting_only: true
   alertmanager:
     repo: prometheus/alertmanager
     version: "0.28.1"
     binaries: [alertmanager, amtool]
-    monitoring_host_only: true
+    alerting_only: true
 monitoring_el_units:
   prometheus-node-exporter:
     description: Prometheus node exporter
@@ -56,23 +59,23 @@ monitoring_el_units:
     exec: >-
       /usr/local/bin/node_exporter --web.listen-address=:{{ node_exporter_port }}
       --collector.textfile.directory={{ textfile_dir }} $ARGS
-    monitoring_host_only: false
+    alerting_only: false
   prometheus-postgres-exporter:
     description: Prometheus PostgreSQL exporter
     env_file: /etc/default/prometheus-postgres-exporter
     exec: /usr/local/bin/postgres_exporter --web.listen-address=:{{ postgres_exporter_port }} $ARGS
-    monitoring_host_only: false
+    alerting_only: false
   prometheus:
     description: Prometheus
     exec: >-
       /usr/local/bin/prometheus --config.file=/etc/prometheus/prometheus.yml
       --storage.tsdb.path=/var/lib/prometheus/metrics2
       --web.listen-address=:{{ prometheus_port }}
-    monitoring_host_only: true
+    alerting_only: true
   prometheus-alertmanager:
     description: Prometheus Alertmanager
     env_file: /etc/default/prometheus-alertmanager
     exec: >-
       /usr/local/bin/alertmanager --config.file=/etc/prometheus/alertmanager.yml
       --storage.path=/var/lib/prometheus/alertmanager $ARGS
-    monitoring_host_only: true
+    alerting_only: true

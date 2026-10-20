@@ -35,7 +35,7 @@ groups:
           runbook_url: "{{ alert_runbook_base }}#postgresreplicationlag"
 
       - alert: BackupTooOld
-        expr: time() - pgbackrest_last_backup_timestamp > 93600
+        expr: time() - max by (repo) (pgbackrest_last_backup_timestamp) > 93600
         for: 1h
         labels: {severity: warning}
         annotations:
@@ -73,3 +73,13 @@ groups:
         annotations:
           summary: "{{ '{{ $labels.instance }}' }} root filesystem below 15% free"
           runbook_url: "{{ alert_runbook_base }}#diskalmostfull"
+{% if alerting_hosts | length > 1 %}
+
+      - alert: AlertmanagerPeerDown
+        expr: alertmanager_cluster_members{job="alertmanager"} < {{ alerting_hosts | length }}
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "The Alertmanager on {{ '{{ $labels.instance }}' }} has lost its peer: alerts now depend on this node alone"
+          runbook_url: "{{ alert_runbook_base }}#alertmanagerpeerdown"
+{% endif %}

@@ -23,13 +23,14 @@ Three identical nodes. Each one runs:
 | node / postgres exporters | Host and database metrics | 9100, 9187 |
 | keepalived (optional) | Floating VIP across the three nodes | VRRP |
 
-The first node also runs the shared services:
+The first node also runs the shared services, and the second node runs its own Prometheus and
+Alertmanager, so alerts still go out while either of the two is down:
 
 | Component | Role | Port |
 |---|---|---|
 | pgBackRest repository 1 | Backups on the first node's disk | — |
-| Prometheus | Scrapes every node, evaluates the alert rules | 9090 |
-| Alertmanager | Routes alerts to your webhook and/or email | 127.0.0.1:9093 |
+| Prometheus (first and second node) | Scrapes every node, evaluates the alert rules | 9090 |
+| Alertmanager (first and second node) | Routes alerts to your webhook and/or email; the two send each alert once | 127.0.0.1:9093, 9094 |
 | Grafana | Overview dashboard, Prometheus and Alertmanager data sources | 3000 |
 
 The optional off-site copy (pgBackRest repository 2) lives in an S3-compatible bucket you
@@ -48,8 +49,9 @@ What survives what, on a 3-node cluster:
   without a synchronous copy rather than stopping (`synchronous_mode_strict: false`).
 - **Two nodes down:** etcd loses quorum and PostgreSQL stops accepting writes. Keycloak cannot
   serve logins. Three nodes tolerate one failure, not two.
-- **The first node down:** the cluster keeps serving, but backups, Prometheus, Alertmanager and
-  Grafana are down with it until it returns or is replaced (`./replace-node`, see Day two).
+- **The first node down:** the cluster keeps serving, and the second node's Prometheus and
+  Alertmanager send the alerts about it. Backups and Grafana are down with it until it returns or
+  is replaced (`./replace-node`, see Day two).
   Meanwhile WAL cannot reach repository 1, so the PostgreSQL leader keeps it on disk. If its disk
   is lost, so is repository 1. This is why production clusters should set `backup_s3`.
 
@@ -76,19 +78,20 @@ generate a private CA (`tls_mode: selfsigned`), or bring a certificate for that 
 | Users | every node (or the VIP / your load balancer) | 443 |
 | Control machine | every node | 22 |
 | Every node | every node | 22, 2379, 2380, 5432, 7800, 8008, 8443, 9000, 57800 |
-| First node | every node | 9100, 9187 (scrapes) |
+| First and second node | every node | 9100, 9187 (scrapes) |
+| First and second node | each other | 9094 (Alertmanager cluster) |
 | Operators | first node | 3000 (Grafana), 9090 (Prometheus) |
 | Operators | every node | 8404 (HAProxy stats, password in the vault) |
-| First node | your bucket, SMTP relay, webhook | as configured |
+| First and second node | your bucket, SMTP relay, webhook | as configured |
 
-Prometheus (9090) and Grafana (3000) listen on all interfaces. Prometheus has no login, so keep
-both reachable only from your operators' network.
+Prometheus (9090, on the first and second node) and Grafana (3000) listen on all interfaces.
+Prometheus has no login, so keep both reachable only from your operators' network.
 
 **Traffic between the nodes is encrypted.** The install creates a cluster-internal CA on the
 first node and gives every node its own certificate from it. etcd (clients and peers), the
-Patroni API, PostgreSQL (replication and Keycloak's connections) and the exporters Prometheus
-scrapes all use TLS, and etcd and the exporters only answer clients holding a certificate from
-that CA. PostgreSQL refuses unencrypted connections from the nodes. Keycloak encrypts its own
+Patroni API, PostgreSQL (replication and Keycloak's connections), the exporters Prometheus
+scrapes and the two Alertmanagers' cluster traffic all use TLS, and etcd, the exporters and the
+Alertmanagers only answer clients holding a certificate from that CA. PostgreSQL refuses unencrypted connections from the nodes. Keycloak encrypts its own
 cluster traffic (port 7800) with mutual TLS. `./verify` checks every one of these ports on every
 node and fails if one answers in plaintext. One port stays plain: 57800, where Keycloak's
 cluster checks that the other nodes are alive. It carries those messages only (node names and addresses), no user,
@@ -260,7 +263,10 @@ change.
 
 ## Monitoring and alerts
 
-Prometheus scrapes every node every 15 seconds. The rules that page you:
+Prometheus scrapes every node every 15 seconds. It runs on the first and second node, each with
+its own Alertmanager: either one alone sees every node and raises every alert, and the two
+Alertmanagers share what they have sent, so each alert reaches you once. CI stops the first node
+and checks the alert about it still arrives. The rules that page you:
 
 | Alert | Fires when | Severity |
 |---|---|---|
@@ -273,6 +279,7 @@ Prometheus scrapes every node every 15 seconds. The rules that page you:
 | DiskAlmostFull | a root filesystem is below 15% free for 10 minutes | warning |
 | ExporterDown | host, database or etcd metrics stop arriving for 5 minutes | warning |
 | CertificateExpiringSoon | a certificate on a node expires within 30 days | warning |
+| AlertmanagerPeerDown | the two Alertmanagers cannot reach each other for 5 minutes | warning |
 
 Alertmanager sends each alert, and its resolution, to the webhook and/or email in `alerting`,
 grouped by alert and node, repeating every 4 hours while it fires. Without `alerting`, alerts
@@ -308,6 +315,10 @@ ANSIBLE_VAULT_PASSWORD_FILE=inventory/.vault_pass ansible-vault view inventory/g
   replica that never catches up, because the leader no longer keeps the WAL it missed; `./verify`
   names it ("is not streaming"). Afterwards it fetches that WAL from the pgBackRest repositories.
   The setting itself takes effect without a restart.
+- **Alerting from the second node, on a cluster installed before it did:** `./verify` fails with
+  "runs no Prometheus yet" until you run `./install` once, which installs Prometheus and
+  Alertmanager on the second node and joins the two Alertmanagers. Open port 9094 between the
+  first and second node first, and let the second node reach your SMTP relay or webhook.
 - **Certificates:** `./verify` fails, and CertificateExpiringSoon fires, 30 days before any
   certificate on a node expires. The ones the cluster signs itself (every node's internal
   certificate, and the HTTPS certificate with `tls_mode: selfsigned`) are renewed with
@@ -335,9 +346,11 @@ Stated plainly, so you can plan around them:
 - Ubuntu 24.04, Rocky Linux 9 and AlmaLinux 9 are tested; RHEL 9 is not in CI.
 - `./replace-node` replaces a node at the same address; moving a node to a new address is not
   scripted.
-- Monitoring and repository 1 live on the first node. Until it returns or is replaced, there is no
-  alerting and no backup to repository 1; `backup_s3` keeps the backups safe. Replacing it starts
-  repository 1 and the metrics history afresh.
+- Grafana and repository 1 live on the first node. Until it returns or is replaced, there are no
+  dashboards and no backup to repository 1 (the second node keeps alerting); `backup_s3` keeps the
+  backups safe. Replacing it starts repository 1 and its metrics history afresh.
+- Alerting runs on the first and second node. With both down, which also stops the cluster,
+  nothing alerts.
 - Prometheus and Grafana listen on all interfaces; restrict them with your firewall.
 - `./rebuild` after losing every node needs the off-site bucket; a cluster without `backup_s3`
   has no backup left once the first node is gone.

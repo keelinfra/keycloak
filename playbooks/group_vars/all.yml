@@ -44,3 +44,7 @@ patroni_api_scheme: "{{ 'https' if internal_tls | default(false) | bool else 'ht
 java_home: >-
   {{ '/usr/lib/jvm/jre-21-openjdk' if ansible_os_family == 'RedHat'
      else '/usr/lib/jvm/java-21-openjdk-' ~ ('arm64' if ansible_architecture == 'aarch64' else 'amd64') }}
+# Prometheus and Alertmanager run on the first node, next to Grafana, and on
+# the next node, so alerts still go out while either machine is down. The
+# two Alertmanagers share their state and send each alert once.
+alerting_hosts: "{{ (([groups['monitoring'][0]] + groups['cluster']) | unique)[:2] }}"

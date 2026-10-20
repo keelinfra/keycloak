@@ -50,8 +50,8 @@ changes, token refreshes. Keycloak may still serve some cached reads.
   `patronictl list`.
 - Patroni stopped on every node: `sudo systemctl start patroni` on each node. The member with
   the most recent data takes the lead.
-- A leader exists but the alert still fires: the metric comes from the first node's Prometheus;
-  check [ExporterDown](#exporterdown).
+- A leader exists but the alert still fires: the metric comes from the Prometheus on the first
+  and second node; check [ExporterDown](#exporterdown).
 
 **Get help** if no leader appears within 5 minutes of etcd being healthy and Patroni running on
 every node, or if `patronictl list` shows two leaders.
@@ -237,7 +237,7 @@ alerts that depend on the missing metrics cannot fire.
 | postgres | `prometheus-postgres-exporter` | 9187 |
 | etcd | `etcd` itself | 2379 |
 
-`sudo systemctl status <unit>` on the node in the alert, then from the first node
+`sudo systemctl status <unit>` on the node in the alert, then from the first or second node
 `sudo curl -s --cacert /etc/keelinfra/tls/internal/ca.crt --cert /etc/keelinfra/tls/internal/node.crt --key /etc/keelinfra/tls/internal/node.key https://<node>:<port>/metrics | head`
 (use `http://` and no certificate options on a cluster with `internal_tls: false`).
 
@@ -245,7 +245,7 @@ alerts that depend on the missing metrics cannot fire.
 
 - A stopped exporter: `sudo systemctl restart <unit>`.
 - The etcd job: etcd itself is not answering on that node; follow [EtcdNoLeader](#etcdnoleader).
-- Answers locally but not from the first node: a firewall between the nodes.
+- Answers locally but not from the first or second node: a firewall between the nodes.
 
 ## CertificateExpiringSoon
 
@@ -272,12 +272,33 @@ that service on that node (`sudo systemctl restart etcd`, `patroni`, or the expo
 **Get help** for an expiring CA, or if a certificate has already expired and the nodes no longer
 reach each other.
 
+## AlertmanagerPeerDown
+
+**Severity:** warning. **Impact:** none for users. The first and second node each run an
+Alertmanager, and the one in the alert cannot reach the other. If the other node is down, alerts
+now depend on this node alone. If both are up but cut off from each other, each sends every alert
+on its own, so you get them twice.
+
+**Check** whether the other alerting node is up (the first two nodes in your cluster definition):
+other alerts about it, such as KeycloakDown, usually fire at the same time. Then, on each of the two,
+`sudo systemctl status prometheus-alertmanager` and
+`curl -s http://127.0.0.1:9093/api/v2/status | python3 -m json.tool | grep -A3 peers`.
+
+**Fix**
+
+- The other node is down: bring it back or replace it (`./replace-node`); its Alertmanager
+  rejoins by itself.
+- Its Alertmanager is stopped: `sudo systemctl restart prometheus-alertmanager` on it.
+- Both run but list only themselves as peers: a firewall between them. Open port 9094 both ways
+  between the first and second node (TCP; also UDP on a cluster with `internal_tls: false`).
+  `./verify` checks that the two see each other.
+
+**Get help** if the two still do not see each other with the port open.
+
 ## Not covered yet
 
 Stated plainly so you can plan around them:
 
-- **Alerting while the first node is down.** Prometheus, Alertmanager and Grafana run there
-  only; until `./replace-node` puts a new first node in place, nothing alerts.
 - **Moving a node to a new address.** `./replace-node` puts a new machine at the same address
   (DEPLOYMENT.md, Day two).
 - **Replacing a CA.** The internal CA and, with `tls_mode: selfsigned`, the HTTPS CA last ten

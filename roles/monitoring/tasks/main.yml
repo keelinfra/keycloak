@@ -32,14 +32,33 @@
   when: internal_tls | default(false) | bool
   register: exporter_tls
 
+# Ubuntu 24.04 packages postgres_exporter 0.15, whose stat_bgwriter collector
+# reads the checkpoint columns PostgreSQL 17 moved to pg_stat_checkpointer:
+# it fails on every scrape and logs an error. 0.17 reads the new view (the
+# RHEL family installs that release). Nothing keelinfra alerts on or graphs
+# uses these metrics, so an older exporter runs without that collector.
+- name: Read the packaged postgres exporter version
+  ansible.builtin.command:
+    cmd: dpkg-query -W -f=${Version} prometheus-postgres-exporter
+  register: pgexp_pkg
+  changed_when: false
+  when: ansible_os_family == 'Debian'
+
 # Local connection over loopback, which pg_hba leaves as plain host.
 - name: Configure postgres exporter connection
+  vars:
+    pgexp_skip_bgwriter: >-
+      {{ ansible_os_family == 'Debian' and postgres_version | int >= 17
+         and pgexp_pkg.stdout | regex_replace('-.*$', '') is version('0.17', '<') }}
+    pgexp_args: >-
+      {{ ([exporter_args] + (['--no-collector.stat_bgwriter'] if pgexp_skip_bgwriter | bool else []))
+         | select | join(' ') }}
   ansible.builtin.copy:
     content: |
       # Managed by keelinfra
       DATA_SOURCE_NAME="postgresql://postgres:{{ vault_postgres_superuser_password
       }}@127.0.0.1:{{ postgres_port }}/postgres?sslmode=disable"
-      ARGS="{{ exporter_args }}"
+      ARGS="{{ pgexp_args }}"
     dest: /etc/default/prometheus-postgres-exporter
     mode: "0600"
   register: pgexp_conf
@@ -90,8 +109,11 @@
   ansible.builtin.command: /usr/local/bin/keelinfra-cert-metrics
   changed_when: false
 
+# --- alerting hosts: prometheus + alertmanager + backup metrics ---------
+# Each runs the same scrapes and rules on its own, so either one alone
+# still sees every node and raises every alert.
 - name: Configure Prometheus
-  when: inventory_hostname == monitoring_host
+  when: inventory_hostname in alerting_hosts
   block:
     - name: Create rules directory
       ansible.builtin.file:
@@ -135,16 +157,48 @@
       ansible.builtin.command: /usr/local/bin/pgbackrest-metrics
       changed_when: false
 
-- name: Install and configure Alertmanager (monitoring host)
-  when: inventory_hostname == monitoring_host
+- name: Install and configure Alertmanager (alerting hosts)
+  when: inventory_hostname in alerting_hosts
+  vars:
+    am_peers: "{{ alerting_hosts | difference([inventory_hostname]) | map('extract', hostvars, 'ansible_host') | list }}"
+    am_cluster_tls: "{{ internal_tls | default(false) | bool and am_peers | length > 0 }}"
+    am_cluster_args: >-
+      {{ (['--cluster.listen-address=' ~ ansible_host ~ ':' ~ alertmanager_cluster_port,
+           '--cluster.advertise-address=' ~ ansible_host ~ ':' ~ alertmanager_cluster_port]
+          + (am_peers | map('regex_replace', '^', '--cluster.peer=')
+             | map('regex_replace', '$', ':' ~ alertmanager_cluster_port) | list)
+          + (['--cluster.tls-config=' ~ alertmanager_cluster_tls_config] if am_cluster_tls | bool else []))
+         if am_peers | length > 0 else ['--cluster.listen-address='] }}
   block:
-    # One Alertmanager, no gossip peers; local only, like the drill that
-    # talks to it. Operators reach it through Grafana or an ssh tunnel.
+    # The API answers locally only, like the drill that talks to it;
+    # operators reach it through Grafana or an ssh tunnel. With a peer, the
+    # two gossip on the cluster port, over mutual TLS with the internal CA,
+    # and whichever is first sends an alert while the other holds back.
+    - name: Configure Alertmanager cluster TLS
+      ansible.builtin.copy:
+        content: |
+          # Managed by keelinfra
+          tls_server_config:
+            cert_file: {{ internal_cert_file }}
+            key_file: {{ internal_key_file }}
+            client_auth_type: RequireAndVerifyClientCert
+            client_ca_file: {{ internal_ca_file }}
+          tls_client_config:
+            cert_file: {{ internal_cert_file }}
+            key_file: {{ internal_key_file }}
+            ca_file: {{ internal_ca_file }}
+        dest: "{{ alertmanager_cluster_tls_config }}"
+        owner: root
+        group: ssl-cert
+        mode: "0640"
+      when: am_cluster_tls | bool
+      register: am_tls
+
     - name: Set Alertmanager listen addresses
       ansible.builtin.copy:
         content: |
           # Managed by keelinfra
-          ARGS="--web.listen-address=127.0.0.1:{{ alertmanager_port }} --cluster.listen-address="
+          ARGS="--web.listen-address=127.0.0.1:{{ alertmanager_port }} {{ am_cluster_args | join(' ') }}"
         dest: /etc/default/prometheus-alertmanager
         mode: "0644"
       register: am_args
@@ -162,7 +216,7 @@
     - name: Restart Alertmanager
       ansible.builtin.systemd:
         name: prometheus-alertmanager
-        state: "{{ 'restarted' if (am_args.changed or am_conf.changed) else 'started' }}"
+        state: "{{ 'restarted' if (am_args.changed or am_conf.changed or am_tls.changed or prom_group.changed) else 'started' }}"
         enabled: true
 
 - name: Install and configure Grafana (monitoring host)
