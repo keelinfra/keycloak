@@ -324,7 +324,8 @@ ANSIBLE_VAULT_PASSWORD_FILE=inventory/.vault_pass ansible-vault view inventory/g
   certificate, and the HTTPS certificate with `tls_mode: selfsigned`) are renewed with
   `./renew-certs`: new certificates from the same CAs, loaded by each service without downtime,
   checked port by port. CI renews them on a running three-node cluster. With `tls_mode: custom`,
-  replace the files, re-run `./configure` and `./install`.
+  replace the files, re-run `./configure` and `./install`; if the CA changed, then `./update-trust`,
+  which restarts Keycloak one node at a time so its JDK trusts the new CA (`./verify` says so).
 - **A node's machine is lost** (dead disk, host that will not boot): give the new machine the
   old node's address and SSH access for `ssh_user`, then `./replace-node <node name>`. It checks
   that the other nodes are healthy, swaps the etcd member, installs the node, lets PostgreSQL
