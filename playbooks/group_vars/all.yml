@@ -48,3 +48,29 @@ java_home: >-
 # the next node, so alerts still go out while either machine is down. The
 # two Alertmanagers share their state and send each alert once.
 alerting_hosts: "{{ (([groups['monitoring'][0]] + groups['cluster']) | unique)[:2] }}"
+# Root CAs removed from every node's trust stores (system bundle and Java),
+# without waiting for the OS packages: roles/common/tasks/trust.yml applies
+# it, ./verify checks it, ./update-trust applies it to a running cluster.
+# Each entry: the certificate in roles/common/files/distrust/, its SHA-256,
+# and its name in Debian's /etc/ca-certificates.conf.
+distrusted_cas:
+  # Eight eMudhra intermediates chain to it whose private keys anyone can
+  # recover from the certificates (disclosed 2026-10-17). Mozilla, Debian
+  # and Ubuntu removed it on 2026-10-20; Red Hat advises blocking it.
+  - name: emSign ECC Root CA - G3
+    file: emSign_ECC_Root_CA_-_G3.pem
+    sha256: 86A1ECBA089C4A8D3BBE2734C612BA341D813E043CF9E8A862CD5C57A36BBE6B
+    debian_conf: mozilla/emSign_ECC_Root_CA_-_G3.crt
+  # Cross-signed the same eight keys. Mozilla and Chrome no longer trust it
+  # for TLS; Red Hat's workaround blocks it too.
+  - name: AAA Certificate Services
+    file: Comodo_AAA_Services_root.pem
+    sha256: D7A7A0FB5D7E2731D771E9484EBCDEF71D5F0C3E0A2948782BC83EE0EA699EF4
+    debian_conf: mozilla/Comodo_AAA_Services_root.crt
+trust_bundle: >-
+  {{ '/etc/pki/tls/certs/ca-bundle.crt' if ansible_os_family == 'RedHat'
+     else '/etc/ssl/certs/ca-certificates.crt' }}
+# The JDK's cacerts; both families build it from the system trust store.
+java_trust_store: >-
+  {{ '/etc/pki/ca-trust/extracted/java/cacerts' if ansible_os_family == 'RedHat'
+     else '/etc/ssl/certs/java/cacerts' }}

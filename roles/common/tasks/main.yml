@@ -54,6 +54,9 @@
     enablerepo: "{{ 'keelinfra-offline' if dnf_offline | bool else omit }}"
   when: ansible_os_family == 'RedHat'
 
+- name: Remove distrusted root CAs from the trust stores
+  ansible.builtin.include_tasks: trust.yml
+
 # Ubuntu images ship cron running; minimal RHEL-family installs may not.
 # pgBackRest's schedule and the backup metrics live in /etc/cron.d.
 - name: Run cron (RHEL family)

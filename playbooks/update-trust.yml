@@ -1,0 +1,44 @@
+---
+# keelinfra/keycloak — remove the root CAs in distrusted_cas
+# (group_vars/all.yml) from a running cluster's trust stores, then restart
+# Keycloak, one node at a time, wherever it still holds the old store: it
+# reads the store once, when it starts. The other nodes keep serving.
+#
+# Other services read the system store when they start, and get the change
+# at their next restart: none of them talks TLS to a public CA except
+# Alertmanager and Grafana, for webhooks, mail and plugin downloads.
+
+- name: Remove distrusted root CAs from every node
+  hosts: cluster
+  tasks:
+    - name: Update the trust stores
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: trust.yml
+
+- name: Restart Keycloak where it runs with the old trust store
+  hosts: keycloak
+  serial: 1
+  any_errors_fatal: true
+  tasks:
+    - name: Read the trust stores
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: trust_report.yml
+      vars:
+        trust_service: keycloak
+
+    - name: Restart Keycloak on this node
+      ansible.builtin.include_tasks: tasks/restart_keycloak_node.yml
+      vars:
+        kc_node: "{{ inventory_hostname }}"
+      when:
+        - trust_report.service_started is not none
+        - trust_report.java_store_mtime is not none
+        - trust_report.service_started < trust_report.java_store_mtime
+
+- name: Check the trust stores
+  hosts: cluster
+  tasks:
+    - name: Check trust stores
+      ansible.builtin.include_tasks: tasks/trust-check.yml

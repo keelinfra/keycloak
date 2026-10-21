@@ -1,0 +1,18 @@
+---
+# Read what this node's trust stores trust (files/trust-store.py) into
+# trust_report. With trust_service set, also when that service started.
+- name: Read the trust stores
+  ansible.builtin.script:
+    cmd: >-
+      trust-store.py --bundle {{ trust_bundle }}
+      --keytool {{ java_home }}/bin/keytool --java-store {{ java_trust_store }}
+      --distrust {{ distrusted_cas | map(attribute='sha256') | join(' ') }}
+      {{ ('--service ' ~ trust_service) if trust_service | default('') | length > 0 else '' }}
+    executable: python3
+  register: trust_report_raw
+  changed_when: false
+  check_mode: false
+
+- name: Keep the trust store report
+  ansible.builtin.set_fact:
+    trust_report: "{{ trust_report_raw.stdout | from_json }}"

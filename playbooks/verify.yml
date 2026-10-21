@@ -118,6 +118,9 @@
     - name: Check certificates
       ansible.builtin.include_tasks: tasks/cert-check.yml
 
+    - name: Check trust stores
+      ansible.builtin.include_tasks: tasks/trust-check.yml
+
     - name: Cluster summary
       ansible.builtin.command:
         cmd: patronictl -c /etc/patroni/config.yml list

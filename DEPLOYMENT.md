@@ -335,6 +335,13 @@ ANSIBLE_VAULT_PASSWORD_FILE=inventory/.vault_pass ansible-vault view inventory/g
   the older history) and new, empty monitoring history. CI kills the third node, then the first,
   of a running three-node cluster and replaces each with a blank machine. A new address is not
   scripted.
+- **A certificate authority is distrusted** (its keys leaked, as with eMudhra in October 2026):
+  `./verify` fails while a node still trusts a root in `distrusted_cas`, or while Keycloak runs
+  with a JDK trust store older than the system one. `./update-trust` removes the roots from every
+  node's system and JDK trust stores and restarts Keycloak one node at a time where it still
+  holds the old store; the other nodes keep serving. CI puts a distrusted root back into the JDK
+  store of a running three-node cluster and removes it this way. See the
+  [CVE policy](CVE-POLICY.md#when-a-certificate-authority-is-distrusted).
 - **Security fixes upstream:** see the [CVE policy](CVE-POLICY.md).
 
 ## Known gaps
