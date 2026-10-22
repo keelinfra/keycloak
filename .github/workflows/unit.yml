@@ -34,8 +34,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       # What the scripts themselves import: PyYAML (.github/scripts) and
-      # cryptography (cert-expiry.py). openssl and keytool come with the runner.
+      # cryptography (cert-expiry.py), pinned like pre-commit in lint.yml.
+      # openssl and keytool come with the runner.
       - name: Install the scripts' dependencies
-        run: python -m pip install pyyaml cryptography
+        run: python -m pip install pyyaml==6.0.3 cryptography==50.0.2
       - name: Run the tests
         run: python -m unittest discover -s tests -v
