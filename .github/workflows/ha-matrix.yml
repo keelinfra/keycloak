@@ -59,7 +59,7 @@ jobs:
     outputs:
       matrix: ${{ steps.rows.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - id: rows
         env:
           ONLY_FROM: ${{ inputs.from }}
@@ -86,10 +86,16 @@ jobs:
       FROM_URL: ${{ matrix.from_dist_url || format('https://github.com/keycloak/keycloak/releases/download/{0}/keycloak-{0}.tar.gz', matrix.from) }}
       TO_URL: ${{ matrix.dist_url || format('https://github.com/keycloak/keycloak/releases/download/{0}/keycloak-{0}.tar.gz', matrix.to) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: docker/setup-buildx-action@v4
-      - uses: crazy-max/ghaction-github-runtime@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        with:
+          # The Actions cache endpoint and token, for BuildKit's type=gha cache.
+          script: |
+            for (const [k, v] of Object.entries(process.env)) {
+              if (k.startsWith("ACTIONS_")) core.exportVariable(k, v);
+            }
 
       - name: Build rig images
         working-directory: dev/containers
@@ -103,19 +109,23 @@ jobs:
         run: |
           echo "from=$(printf '%s' "$FROM_URL" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
           echo "to=$(printf '%s' "$TO_URL" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: .dev/dist-cache/${{ matrix.from }}
           key: kc-dist-${{ matrix.from }}-${{ steps.keys.outputs.from }}
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: .dev/dist-cache/${{ matrix.to }}
           key: kc-dist-${{ matrix.to }}-${{ steps.keys.outputs.to }}
 
       - name: Drill ${{ matrix.from }} → ${{ matrix.to }} on three nodes
+        env:
+          FROM: ${{ matrix.from }}
+          TO: ${{ matrix.to }}
+          STRATEGY: ${{ matrix.strategy }}
         run: |
-          HA_SKIP_BUILD=1 dev/ha-drill.sh --from "${{ matrix.from }}" --to "${{ matrix.to }}" \
-            --strategy "${{ matrix.strategy }}" --from-dist-url "$FROM_URL" --dist-url "$TO_URL"
+          HA_SKIP_BUILD=1 dev/ha-drill.sh --from "$FROM" --to "$TO" \
+            --strategy "$STRATEGY" --from-dist-url "$FROM_URL" --dist-url "$TO_URL"
 
       - name: Receipt
         if: always()
@@ -125,7 +135,7 @@ jobs:
         if: always()
         run: dev/ha-logs.sh .dev/containers/artifacts
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         if: always()
         with:
           name: ha-${{ matrix.from }}-${{ matrix.to }}

@@ -27,7 +27,7 @@ jobs:
     outputs:
       matrix: ${{ steps.rows.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - id: rows
         # Every row in .github/upgrade-paths.yml, whatever the trigger.
         run: |
@@ -42,8 +42,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.paths.outputs.matrix) }}
+    env:
+      FROM: ${{ matrix.from }}
+      TO: ${{ matrix.to }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Install ansible
         run: |
@@ -62,7 +65,7 @@ jobs:
           ssh_user: runner
           domain: sso.ci.local
           vip: ""
-          keycloak_version: "${{ matrix.from }}"
+          keycloak_version: "$FROM"
           tls_mode: selfsigned
           CFG
 
@@ -87,7 +90,7 @@ jobs:
       - name: Upgrade to ${{ matrix.to }}
         env:
           DIST_URL: ${{ matrix.dist_url }}
-        run: ./upgrade --to "${{ matrix.to }}" ${DIST_URL:+--dist-url "$DIST_URL"}
+        run: ./upgrade --to "$TO" ${DIST_URL:+--dist-url "$DIST_URL"}
 
       # The stop-start strategy has a documented short service window
       # (UPGRADES.md), and haproxy needs a couple of health-check rounds to
@@ -97,7 +100,7 @@ jobs:
         run: |
           target=$(readlink /opt/keycloak/current)
           echo "active version: $target"
-          [[ "$(basename "$target")" == "keycloak-${{ matrix.to }}" ]]
+          [[ "$(basename "$target")" == "keycloak-$TO" ]]
           curl -fsk --retry 10 --retry-delay 3 --retry-all-errors \
             https://127.0.0.1:9000/health/ready
           curl -fsk --retry 20 --retry-delay 3 --retry-all-errors \
@@ -113,7 +116,7 @@ jobs:
             -d refresh_token="$REFRESH_TOKEN" \
             https://sso.ci.local/realms/demo/protocol/openid-connect/token \
             | jq -er .access_token > /dev/null
-          echo "✓ session created on ${{ matrix.from }} still refreshes on ${{ matrix.to }}"
+          echo "✓ session created on $FROM still refreshes on $TO"
 
       - name: Full session drill on the new version
         run: ./verify --drill session

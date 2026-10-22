@@ -45,7 +45,7 @@ jobs:
     env:
       VM_DISK_DIR: /var/lib/libvirt/images/kc-vm
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Enable KVM and install libvirt
         run: |
@@ -61,8 +61,14 @@ jobs:
             dnsmasq-base ipxe-qemu ovmf
           sudo systemctl start libvirtd
 
-      - uses: docker/setup-buildx-action@v4
-      - uses: crazy-max/ghaction-github-runtime@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        with:
+          # The Actions cache endpoint and token, for BuildKit's type=gha cache.
+          script: |
+            for (const [k, v] of Object.entries(process.env)) {
+              if (k.startsWith("ACTIONS_")) core.exportVariable(k, v);
+            }
 
       - name: Build the control image
         working-directory: dev/containers
@@ -119,7 +125,7 @@ jobs:
             echo "::endgroup::"
           done
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         if: always()
         with:
           name: vm-${{ matrix.os }}-logs
