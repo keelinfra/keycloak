@@ -1,0 +1,44 @@
+---
+# Check this node trusts none of distrusted_cas, that the JDK's trust store
+# has every removal the system store has, and that Keycloak runs with the
+# current JDK store: it reads the store once, when it starts.
+- name: Read the trust stores
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: trust_report.yml
+  vars:
+    trust_service: "{{ 'keycloak' if inventory_hostname in groups['keycloak'] else '' }}"
+
+- name: No distrusted root CA is trusted (distrusted_cas)
+  vars:
+    still_trusted: >-
+      {{ distrusted_cas | selectattr('sha256', 'in',
+           (trust_report.distrusted_in_bundle + trust_report.distrusted_in_java) | map('upper') | list)
+         | map(attribute='name') | list }}
+  ansible.builtin.assert:
+    that: still_trusted | length == 0
+    fail_msg: >-
+      {{ inventory_hostname }} still trusts {{ still_trusted | join(', ') }}. Run ./update-trust.
+    quiet: true
+
+- name: The JDK's trust store has every removal the system store has
+  ansible.builtin.assert:
+    that: trust_report.java_not_in_bundle | length == 0
+    fail_msg: >-
+      The JDK on {{ inventory_hostname }} trusts {{ trust_report.java_not_in_bundle | length }}
+      root CAs the system store has removed ({{ trust_report.java_not_in_bundle[:3] | join(', ') }}
+      {{- ', ...' if trust_report.java_not_in_bundle | length > 3 }}). Run ./update-trust.
+    quiet: true
+
+- name: Keycloak runs with the current JDK trust store
+  ansible.builtin.assert:
+    that: >-
+      trust_report.service_started is none or trust_report.java_store_mtime is none
+      or trust_report.service_started >= trust_report.java_store_mtime
+    fail_msg: >-
+      Keycloak on {{ inventory_hostname }} started before its trust store last changed
+      ({{ '%Y-%m-%d %H:%M' | strftime(trust_report.java_store_mtime | int, utc=true) }} UTC), so it
+      still trusts what that change removed. Run ./update-trust: it restarts Keycloak one node at
+      a time.
+    quiet: true
+  when: inventory_hostname in groups['keycloak']

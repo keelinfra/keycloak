@@ -91,6 +91,8 @@ When a machine dies, `./replace-node kc-node3` installs a fresh one at the same 
 
 `./verify` and an alert warn 30 days before any certificate on a node expires; `./renew-certs` renews the ones the cluster signs itself, without downtime.
 
+When a certificate authority is distrusted, `./update-trust` removes it from every node's system and Java trust stores and restarts Keycloak one node at a time, without waiting for the OS packages; `./verify` fails until it is gone ([why](CVE-POLICY.md#when-a-certificate-authority-is-distrusted)).
+
 CI runs a clean single-node install with the session and restore drills on every commit, installs a 3-node cluster and runs every drill on it whenever the roles change, and re-proves every supported upgrade path nightly — single-node, and on three nodes under load-balancer probes.
 
 ## Upgrades

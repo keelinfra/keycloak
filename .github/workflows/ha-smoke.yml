@@ -151,6 +151,27 @@ jobs:
           dev/ha-exec.sh ./renew-certs
           dev/ha-exec.sh ./verify
 
+      - name: Trust a distrusted root CA again on every node, then remove it with ./update-trust
+        run: |
+          # As on a node whose JDK store missed a removal: ./verify must name
+          # the root, ./update-trust must rebuild the store and restart Keycloak.
+          for n in kc-node1 kc-node2 kc-node3; do
+            docker exec -i "$n" sh -c 'if [ -d /etc/pki/ca-trust ]; then
+                k=/usr/lib/jvm/jre-21-openjdk/bin/keytool s=/etc/pki/ca-trust/extracted/java/cacerts
+              else
+                k=/usr/lib/jvm/java-21-openjdk-amd64/bin/keytool s=/etc/ssl/certs/java/cacerts
+              fi
+              "$k" -importcert -noprompt -alias ci-distrusted -keystore "$s" -storepass changeit' \
+              < roles/common/files/distrust/emSign_ECC_Root_CA_-_G3.pem
+          done
+          if dev/ha-exec.sh ./verify > "$RUNNER_TEMP/verify-distrusted.txt" 2>&1; then
+            echo "./verify passed with a distrusted root in the JDK's trust store" >&2
+            exit 1
+          fi
+          grep "still trusts emSign ECC Root CA - G3" "$RUNNER_TEMP/verify-distrusted.txt"
+          dev/ha-exec.sh ./update-trust
+          dev/ha-exec.sh ./verify
+
       - name: Restore the database to a point in time, then check the data and the cluster
         run: |
           dev/ha-exec.sh env ANSIBLE_VAULT_PASSWORD_FILE=/work/inventory/.vault_pass \
@@ -262,6 +283,27 @@ jobs:
       - name: Renew every certificate on the running cluster, then check again
         run: |
           dev/ha-exec.sh ./renew-certs
+          dev/ha-exec.sh ./verify
+
+      - name: Trust a distrusted root CA again on every node, then remove it with ./update-trust
+        run: |
+          # As on a node whose JDK store missed a removal: ./verify must name
+          # the root, ./update-trust must rebuild the store and restart Keycloak.
+          for n in kc-node1 kc-node2 kc-node3; do
+            docker exec -i "$n" sh -c 'if [ -d /etc/pki/ca-trust ]; then
+                k=/usr/lib/jvm/jre-21-openjdk/bin/keytool s=/etc/pki/ca-trust/extracted/java/cacerts
+              else
+                k=/usr/lib/jvm/java-21-openjdk-amd64/bin/keytool s=/etc/ssl/certs/java/cacerts
+              fi
+              "$k" -importcert -noprompt -alias ci-distrusted -keystore "$s" -storepass changeit' \
+              < roles/common/files/distrust/emSign_ECC_Root_CA_-_G3.pem
+          done
+          if dev/ha-exec.sh ./verify > "$RUNNER_TEMP/verify-distrusted.txt" 2>&1; then
+            echo "./verify passed with a distrusted root in the JDK's trust store" >&2
+            exit 1
+          fi
+          grep "still trusts emSign ECC Root CA - G3" "$RUNNER_TEMP/verify-distrusted.txt"
+          dev/ha-exec.sh ./update-trust
           dev/ha-exec.sh ./verify
 
       - name: Restore the database to a point in time, then check the data and the cluster

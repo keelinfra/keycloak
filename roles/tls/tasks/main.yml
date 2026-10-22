@@ -127,3 +127,15 @@
 - name: Keep a copy of the CAs on the control machine
   ansible.builtin.include_tasks: ca_backup.yml
   when: inventory_hostname == tls_ca_host
+
+# On the Debian family the JDK's copy of the trust store misses a CA file
+# replaced in place, as a switch to tls_mode: custom does (same file name):
+# it keeps the old CA and never gets the new one. So update the system store
+# now and bring the JDK's copy in step with it.
+- name: Update the system trust store now
+  ansible.builtin.meta: flush_handlers
+
+- name: Bring the JDK's trust store in step with the system one
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: trust.yml

@@ -1,0 +1,107 @@
+---
+# Remove the root CAs in distrusted_cas (group_vars/all.yml) from the
+# system trust store and from the JDK's, without waiting for the OS
+# packages. Safe to run again: nothing changes once they are gone.
+#
+# Both families build the JDK's cacerts from the system store, but on the
+# Debian family that copy is only ever added to and deleted from by a hook,
+# and the hook misses removals: after Ubuntu's 2026-10-20 ca-certificates
+# update, a JDK installed with 24.04's original package still trusted all 43
+# roots the update removed, emSign ECC Root CA - G3 among them. So there the
+# JDK's store is rebuilt from the system one whenever it trusts something
+# the system store no longer does.
+
+- name: Block the distrusted root CAs (RHEL family)
+  ansible.builtin.copy:
+    src: "distrust/{{ item.file }}"
+    dest: "/etc/pki/ca-trust/source/blocklist/keelinfra-{{ item.file }}"
+    mode: "0644"
+  loop: "{{ distrusted_cas }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: trust_blocklist
+  when: ansible_os_family == 'RedHat'
+
+# Not a handler: the report below has to read the rebuilt stores.
+- name: Rebuild the trust stores (RHEL family)  # noqa: no-handler
+  ansible.builtin.command: update-ca-trust extract
+  when: trust_blocklist is changed
+  changed_when: true
+
+# A "!" in front of a certificate's line deselects it; the package keeps
+# the mark across updates. Lines that are already gone are left alone.
+- name: Deselect the distrusted root CAs (Debian family)
+  ansible.builtin.lineinfile:
+    path: /etc/ca-certificates.conf
+    regexp: "^{{ item.debian_conf | regex_escape }}$"
+    line: "!{{ item.debian_conf }}"
+    backrefs: true
+  loop: "{{ distrusted_cas }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: trust_deselect
+  when: ansible_os_family == 'Debian'
+
+- name: Rebuild the system trust store (Debian family)  # noqa: no-handler
+  ansible.builtin.command: update-ca-certificates
+  when: trust_deselect is changed
+  changed_when: true
+
+- name: Read the trust stores
+  ansible.builtin.include_tasks: trust_report.yml
+
+# Something put there by hand (keytool -importcert) lasts until the next
+# extract.
+- name: Rebuild the JDK's trust store from the system one (RHEL family)
+  ansible.builtin.command: update-ca-trust extract
+  when:
+    - ansible_os_family == 'RedHat'
+    - trust_report.distrusted_in_java | length > 0 or trust_report.java_not_in_bundle | length > 0
+  changed_when: true
+
+- name: Rebuild the JDK's trust store from the system one (Debian family)
+  when:
+    - ansible_os_family == 'Debian'
+    - trust_report.java_count is not none
+    - trust_report.distrusted_in_java | length > 0 or trust_report.java_not_in_bundle | length > 0
+  block:
+    - name: Move the old JDK trust store aside
+      ansible.builtin.command:
+        cmd: mv -f {{ java_trust_store }} {{ java_trust_store }}.before-rebuild
+      changed_when: true
+
+    # With no store to update, the hook writes a new one from every
+    # certificate the system store holds.
+    - name: Write a new JDK trust store
+      ansible.builtin.command: update-ca-certificates --fresh
+      changed_when: true
+
+    - name: Check the new JDK trust store was written
+      ansible.builtin.stat:
+        path: "{{ java_trust_store }}"
+      register: trust_new_java_store
+      failed_when: not trust_new_java_store.stat.exists
+  rescue:
+    - name: Put the old JDK trust store back
+      ansible.builtin.command:
+        cmd: mv -f {{ java_trust_store }}.before-rebuild {{ java_trust_store }}
+        removes: "{{ java_trust_store }}.before-rebuild"
+
+    - name: Report the failed rebuild
+      ansible.builtin.fail:
+        msg: >-
+          Rebuilding {{ java_trust_store }} on {{ inventory_hostname }} failed; the old
+          store is back in place. It still trusts what the system store has removed.
+
+- name: Read the trust stores again
+  ansible.builtin.include_tasks: trust_report.yml
+
+- name: Nothing in distrusted_cas is trusted any more
+  ansible.builtin.assert:
+    that:
+      - trust_report.distrusted_in_bundle | length == 0
+      - trust_report.distrusted_in_java | length == 0
+      - trust_report.java_not_in_bundle | length == 0
+    fail_msg: >-
+      {{ inventory_hostname }} still trusts a distrusted root CA: {{ trust_report | to_json }}
+    quiet: true
