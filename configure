@@ -50,8 +50,8 @@ fi
 # Vault password must exist before ansible-vault encrypt runs
 mkdir -p inventory
 if [[ ! -f inventory/.vault_pass ]]; then
-  openssl rand -base64 32 | tr -d '/+=\n' > inventory/.vault_pass
-  chmod 600 inventory/.vault_pass
+  # umask first: the file must never exist with the default 0644, even briefly
+  (umask 077 && openssl rand -base64 32 | tr -d '/+=\n' > inventory/.vault_pass)
 fi
 
 export ANSIBLE_VAULT_PASSWORD_FILE="$PWD/inventory/.vault_pass"

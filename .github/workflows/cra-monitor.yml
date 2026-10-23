@@ -19,4 +19,4 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: keelinfra/release-ledger/monitor@e3b7a834667dc585e8665dd4719b6aa8fb65a3a2  # main, 2026-10-17
+      - uses: keelinfra/release-ledger/monitor@957a6bb6a5124e9d69511678191e93e080640dfa  # main, 2026-10-23
