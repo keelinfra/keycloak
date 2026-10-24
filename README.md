@@ -9,6 +9,11 @@
 
 # keelinfra/keycloak
 
+> [!WARNING]
+> **Discontinued on 24 October 2026.** This distribution is no longer maintained: no new releases, no security updates, no support, and no subscriptions. The repository is kept read-only as a record. No subscription or support contract was ever sold for it.
+>
+> If you run it, move to a maintained Keycloak: the upstream [Keycloak](https://www.keycloak.org/) project (its container image or the Keycloak Operator), or a commercially supported build such as the Red Hat build of Keycloak. The playbooks here stay readable under Apache-2.0 if you want to keep them yourself.
+
 [![smoke](https://github.com/keelinfra/keycloak/actions/workflows/smoke.yml/badge.svg)](https://github.com/keelinfra/keycloak/actions/workflows/smoke.yml)
 [![upgrade matrix](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml/badge.svg)](https://github.com/keelinfra/keycloak/actions/workflows/upgrade-matrix.yml)
 [![HA matrix](https://github.com/keelinfra/keycloak/actions/workflows/ha-matrix.yml/badge.svg)](https://github.com/keelinfra/keycloak/actions/workflows/ha-matrix.yml)
@@ -21,7 +26,7 @@ Keycloak is powerful. Running it in production is not. keelinfra packages what e
 
 Keycloak has no rolling upgrades across minor versions, a cluster layer that is easy to misconfigure, and a realm import/export story that loses settings. Managed Keycloak vendors solve this by hosting your identity data on their cloud. If you can't or won't do that — regulated industry, data residency, air-gapped — you are on your own.
 
-keelinfra is the third option: a distribution you run yourself, with a subscription for the people who need someone to call.
+keelinfra was the third option: a distribution you run yourself.
 
 ## What you get
 
@@ -101,17 +106,11 @@ CI runs a clean single-node install with the session and restore drills on every
 ./upgrade --to 26.8.1
 ```
 
-Supported paths are listed in [UPGRADES.md](UPGRADES.md) and re-verified nightly in CI. We do not claim to support an upgrade path we have not run. Need one that isn't listed? [Request it](https://github.com/keelinfra/keycloak/issues/new?template=upgrade_path_request.yml) — we drill it in public CI before it goes on the list.
-
-## Subscription
-
-The distribution is free and open source. A yearly subscription adds [CVE tracking](CVE-POLICY.md), upgrade runbooks, and direct access to the people who build it; prebuilt offline bundles for each release join it when they ship (anyone can build one today with `bundle/build.sh`). Standard is $4,500 per production cluster per year (up to 3 Keycloak nodes), Enterprise from $12,000 — not per user. → https://keelinfra.io/keycloak/pricing/
-
-CVE tracking means notification, impact analysis against your configuration, and help upgrading along a drilled path — **not** backported patches. [CVE-POLICY.md](CVE-POLICY.md) states the boundary, and works through what "20 CVEs" actually meant for two recent releases.
+Supported paths are listed in [UPGRADES.md](UPGRADES.md) and were re-verified nightly in CI until the distribution was discontinued. We do not claim to support an upgrade path we have not run. 
 
 ## Security
 
-Report vulnerabilities privately: [SECURITY.md](SECURITY.md). Releases from October 2026 on carry a CycloneDX SBOM and signed attestations you can check with `gh attestation verify`; how that and our vulnerability handling line up with the EU Cyber Resilience Act is in [CRA.md](CRA.md).
+The distribution is discontinued and gets no security updates: [SECURITY.md](SECURITY.md). Releases from October 2026 on carry a CycloneDX SBOM and signed attestations you can check with `gh attestation verify`; how that and our vulnerability handling line up with the EU Cyber Resilience Act is in [CRA.md](CRA.md).
 
 ## License
 

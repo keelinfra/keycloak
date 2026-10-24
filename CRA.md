@@ -1,5 +1,8 @@
 # EU Cyber Resilience Act
 
+> [!WARNING]
+> **Discontinued on 24 October 2026.** The keelinfra Keycloak distribution is no longer maintained and gets no security updates. This page is kept as a record of how it was run; nothing on it is a current commitment. No subscription or support contract was ever sold.
+
 The EU Cyber Resilience Act ([Regulation (EU) 2024/2847](https://eur-lex.europa.eu/eli/reg/2024/2847/oj))
 sets security rules for software and hardware sold in the EU. Its reporting duties
 apply since 11 September 2026; everything else applies from 11 December 2027.
